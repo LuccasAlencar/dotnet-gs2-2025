@@ -6,14 +6,18 @@ const curriculoInput = document.getElementById('curriculoInput');
 const fileName = document.getElementById('fileName');
 const curriculoInfo = document.getElementById('curriculoInfo');
 const keywordsDiv = document.getElementById('keywords');
+const locationsDiv = document.getElementById('locations');
+const locationsTitle = document.getElementById('locationsTitle');
 const searchForm = document.getElementById('searchForm');
+const container = document.querySelector('.container');
 const loading = document.getElementById('loading');
 const resultsSection = document.getElementById('resultsSection');
 const resultsCount = document.getElementById('resultsCount');
 const jobsList = document.getElementById('jobsList');
 
-// Palavras-chave extraídas do currículo
+// Palavras-chave e localizações extraídas do currículo
 let extractedKeywords = [];
+let extractedLocations = [];
 
 // Upload de Currículo
 curriculoInput.addEventListener('change', async (e) => {
@@ -21,39 +25,69 @@ curriculoInput.addEventListener('change', async (e) => {
     if (!file) return;
 
     fileName.textContent = file.name;
-    
-    // Simular extração de palavras-chave
-    // Em produção, aqui você enviaria o arquivo para uma API de processamento/IA
+
     await extractKeywordsFromCurriculo(file);
 });
 
-// Função simulada de extração de palavras-chave
 async function extractKeywordsFromCurriculo(file) {
-    // Simulação de processamento
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Palavras-chave simuladas (em produção viriam de IA/NLP)
-    const simulatedKeywords = [
-        'javascript', 'react', 'nodejs', 'sql', 'git',
-        'agile', 'scrum', 'api', 'frontend', 'backend'
-    ];
-    
-    extractedKeywords = simulatedKeywords;
-    
-    // Exibir palavras-chave
-    keywordsDiv.innerHTML = '';
-    extractedKeywords.forEach(keyword => {
-        const span = document.createElement('span');
-        span.className = 'keyword';
-        span.textContent = keyword;
-        keywordsDiv.appendChild(span);
-    });
-    
-    curriculoInfo.classList.remove('hidden');
-    
-    // Preencher campo de busca com primeira palavra-chave
-    if (extractedKeywords.length > 0) {
-        document.getElementById('cargo').value = extractedKeywords[0];
+    try {
+        curriculoInfo.classList.add('hidden');
+        keywordsDiv.innerHTML = '';
+        locationsDiv.innerHTML = '';
+        locationsTitle.classList.add('hidden');
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_BASE_URL}/resumes/skills`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const error = await safeParseError(response);
+            throw new Error(error?.message || 'Falha ao extrair palavras-chave do currículo');
+        }
+
+        const data = await response.json();
+        extractedKeywords = data.skills || [];
+        extractedLocations = data.locations || [];
+
+        if (extractedKeywords.length === 0) {
+            showKeywordsMessage('Nenhuma habilidade foi identificada automaticamente. Você ainda pode buscar vagas manualmente.');
+        } else {
+            renderKeywords(extractedKeywords);
+        }
+
+        if (extractedLocations.length > 0) {
+            renderLocations(extractedLocations);
+            locationsTitle.classList.remove('hidden');
+        } else {
+            locationsTitle.classList.add('hidden');
+        }
+
+        const suggestedLocation = data.suggestedLocation || extractedLocations[0] || '';
+        if (suggestedLocation) {
+            document.getElementById('localizacao').value = suggestedLocation;
+        }
+
+        const query = buildSearchQuery(extractedKeywords);
+        document.getElementById('cargo').value = query;
+
+        curriculoInfo.classList.remove('hidden');
+
+        if (query) {
+            await buscarVagas(query, document.getElementById('localizacao').value.trim());
+        }
+    } catch (error) {
+        console.error('Erro ao processar currículo:', error);
+        extractedKeywords = [];
+        extractedLocations = [];
+        showKeywordsMessage(error.message || 'Erro ao processar currículo. Tente novamente.');
+        locationsDiv.innerHTML = '';
+        locationsTitle.classList.add('hidden');
+        curriculoInfo.classList.remove('hidden');
+        displayTransientError('Não foi possível processar o currículo. Verifique se o arquivo está em PDF.');
     }
 }
 
@@ -63,18 +97,17 @@ searchForm.addEventListener('submit', async (e) => {
     
     const cargo = document.getElementById('cargo').value.trim();
     const localizacao = document.getElementById('localizacao').value.trim();
-    const categoria = document.getElementById('categoria').value;
     
     if (!cargo) {
         alert('Por favor, informe um cargo ou palavra-chave');
         return;
     }
     
-    await buscarVagas(cargo, localizacao, categoria);
+    await buscarVagas(cargo, localizacao);
 });
 
 // Função para buscar vagas na API
-async function buscarVagas(cargo, localizacao, categoria) {
+async function buscarVagas(cargo, localizacao) {
     try {
         // Mostrar loading
         loading.classList.remove('hidden');
@@ -89,7 +122,6 @@ async function buscarVagas(cargo, localizacao, categoria) {
             body: JSON.stringify({
                 cargo: cargo,
                 localizacao: localizacao || 'brasil',
-                categoria: categoria || 'it-jobs',
                 pagina: 1,
                 resultadosPorPagina: 20
             })
@@ -208,3 +240,60 @@ function criarJobCard(job) {
 // Mensagem de boas-vindas
 console.log('🚀 Frontend carregado com sucesso!');
 console.log('📡 API: ' + API_BASE_URL);
+
+function renderKeywords(keywords) {
+    keywordsDiv.innerHTML = '';
+    keywords.forEach(keyword => {
+        const span = document.createElement('span');
+        span.className = 'keyword';
+        span.textContent = keyword;
+        keywordsDiv.appendChild(span);
+    });
+}
+
+function renderLocations(locations) {
+    locationsDiv.innerHTML = '';
+    locations.forEach(location => {
+        const span = document.createElement('span');
+        span.className = 'keyword';
+        span.textContent = location;
+        locationsDiv.appendChild(span);
+    });
+}
+
+function showKeywordsMessage(message) {
+    keywordsDiv.innerHTML = '';
+    const paragraph = document.createElement('p');
+    paragraph.style.color = '#555';
+    paragraph.textContent = message;
+    keywordsDiv.appendChild(paragraph);
+}
+
+async function safeParseError(response) {
+    try {
+        const data = await response.json();
+        return data;
+    } catch {
+        return null;
+    }
+}
+
+function displayTransientError(message) {
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'error';
+    errorDiv.textContent = message;
+    container.insertBefore(errorDiv, container.firstChild);
+    setTimeout(() => errorDiv.remove(), 5000);
+}
+
+function buildSearchQuery(keywords) {
+    if (!Array.isArray(keywords) || keywords.length === 0) {
+        return '';
+    }
+
+    const topKeywords = keywords
+        .filter(keyword => typeof keyword === 'string' && keyword.trim().length > 0)
+        .slice(0, 5);
+
+    return topKeywords.join(' ');
+}

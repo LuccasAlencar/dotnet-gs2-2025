@@ -18,7 +18,7 @@ public class JobSearchRequestDto
     /// <summary>
     /// Categoria da vaga (ex: "it-jobs", "engineering-jobs")
     /// </summary>
-    public string? Categoria { get; set; } = "it-jobs";
+    public string? Categoria { get; set; }
 
     /// <summary>
     /// Página dos resultados (padrão: 1)

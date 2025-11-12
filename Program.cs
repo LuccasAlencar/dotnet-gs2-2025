@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using dotnet_gs2_2025.Configuration;
 using dotnet_gs2_2025.Data;
 using dotnet_gs2_2025.Repositories;
 using dotnet_gs2_2025.Services;
@@ -48,8 +49,18 @@ try
     builder.Services.AddScoped<IUserRepository, UserRepository>();
     builder.Services.AddScoped<IUserService, UserService>();
     
-    // Configurar HttpClient e Adzuna Service
+    builder.Services.Configure<HuggingFaceOptions>(builder.Configuration.GetSection(HuggingFaceOptions.SectionName));
+
+    builder.Services.AddSingleton<IPdfTextExtractor, PdfTextExtractor>();
+    builder.Services.AddScoped<IResumeService, ResumeService>();
+
+    // Configurar HttpClient e serviços externos
     builder.Services.AddHttpClient<IAdzunaService, AdzunaService>();
+    builder.Services.AddHttpClient<IHuggingFaceService, HuggingFaceService>(client =>
+    {
+        client.BaseAddress = new Uri("https://router.huggingface.co/hf-inference/");
+        client.Timeout = TimeSpan.FromSeconds(60);
+    });
 
     // Configuração de CORS
     builder.Services.AddCors(options =>

@@ -46,8 +46,9 @@ API RESTful para busca de vagas de emprego usando Adzuna API, com gerenciamento 
 
 ### 5. Frontend
 - ✅ **Interface Web**: HTML/CSS/JavaScript responsivo
-- ✅ **Upload de Currículo**: Extração de palavras-chave (simulado)
-- ✅ **Busca de Vagas**: Filtros por cargo, localização e categoria
+- ✅ **Upload de Currículo**: Extração de habilidades via Hugging Face
+- ✅ **Sugestão Automática**: Localização e palavras-chave preenchidas pelo currículo
+- ✅ **Busca de Vagas**: Disparo automático após upload (editável pelo usuário)
 - ✅ **Listagem de Resultados**: Cards informativos com link para vaga
 
 ## 🛠️ Tecnologias
@@ -70,26 +71,43 @@ API RESTful para busca de vagas de emprego usando Adzuna API, com gerenciamento 
 dotnet-gs2-2025/
 ├── Controllers/
 │   ├── V1/
+│   │   ├── JobsController.cs     # Busca de vagas
+│   │   ├── ResumesController.cs  # Processamento de currículo
 │   │   └── UsersController.cs    # API versão 1
 │   ├── V2/
 │   │   └── UsersController.cs    # API versão 2
 │   └── HealthController.cs        # Health check
+├── Configuration/
+│   └── HuggingFaceOptions.cs     # Configurações do modelo IA
 ├── Data/
 │   └── ApplicationDbContext.cs    # Contexto do EF Core
 ├── Models/
+│   ├── HuggingFaceEntity.cs       # Entidades retornadas pela IA
 │   ├── User.cs                    # Entidade User
 │   └── DTOs/
+│       ├── JobDto.cs              # DTO de vagas
 │       ├── UserCreateDto.cs       # DTO para criação
 │       ├── UserUpdateDto.cs       # DTO para atualização
 │       ├── UserResponseDto.cs     # DTO para resposta
 │       ├── PagedResponse.cs       # DTO para paginação
+│       ├── ResumeUploadRequestDto.cs # DTO upload de currículo
+│       ├── SkillExtractionResponseDto.cs # DTO resposta Hugging Face
+│       ├── SkillExtractionResult.cs # Resultado interno de extração
 │       └── Link.cs                # DTO para HATEOAS
+│   └── ResumeExtraction.cs        # Entidades consolidadas do currículo
 ├── Repositories/
 │   ├── IUserRepository.cs         # Interface do repositório
 │   └── UserRepository.cs          # Implementação do repositório
 ├── Services/
+│   ├── IAdzunaService.cs          # Interface de vagas
+│   ├── IHuggingFaceService.cs     # Interface IA de habilidades
+│   ├── IResumeService.cs          # Interface processamento currículo
 │   ├── IUserService.cs            # Interface do serviço
-│   └── UserService.cs             # Lógica de negócio
+│   ├── AdzunaService.cs           # Integração com Adzuna
+│   ├── HuggingFaceService.cs      # Integração com Hugging Face
+│   ├── PdfTextExtractor.cs        # Leitura de texto em PDFs
+│   ├── ResumeService.cs           # Orquestra extração de habilidades
+│   └── UserService.cs             # Lógica de usuários
 ├── logs/                          # Logs da aplicação
 ├── appsettings.json               # Configurações
 └── Program.cs                     # Configuração da aplicação
@@ -119,6 +137,9 @@ Crie um arquivo `.env` na raiz do projeto com suas credenciais:
 ADZUNA_APP_ID=seu_app_id_aqui
 ADZUNA_APP_KEY=seu_app_key_aqui
 
+# Hugging Face
+HUGGINGFACE__TOKEN=seu_token_hugging_face
+
 # Oracle Database Credentials
 ORACLE_USER_ID=seu_usuario
 ORACLE_PASSWORD=sua_senha
@@ -126,6 +147,7 @@ ORACLE_DATA_SOURCE=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=host)(PORT=1521))(C
 ```
 
 **Obtenha suas credenciais Adzuna em**: https://developer.adzuna.com/
+**Token da API Hugging Face**: https://huggingface.co/settings/tokens
 
 ### 3. Certifique-se que a tabela existe no banco
 
@@ -314,6 +336,39 @@ Remove um usuário.
 - `204 No Content`: Usuário removido
 - `404 Not Found`: Usuário não existe
 
+#### POST /api/v1/resumes/skills
+Extrai habilidades de um currículo em PDF usando a IA Hugging Face.
+
+**Form-Data:**
+- `file` (arquivo, obrigatório): Currículo em formato PDF (máx. 5MB)
+
+**Resposta (200 OK):**
+```json
+{
+  "skills": ["Java", "Spring", "SQL"],
+  "totalSkills": 3,
+  "textLength": 12345,
+  "locations": ["São Paulo", "Brasil"],
+  "suggestedLocation": "São Paulo",
+  "metadata": {
+    "fileName": "curriculo.pdf",
+    "fileSizeBytes": 345678
+  },
+  "links": [
+    {
+      "href": "http://localhost:5000/api/v1/resumes/skills",
+      "rel": "self",
+      "method": "POST"
+    },
+    {
+      "href": "http://localhost:5000/api/v1/jobs/search",
+      "rel": "jobs-search",
+      "method": "POST"
+    }
+  ]
+}
+```
+
 ### Versão 2 (v2)
 
 A versão 2 possui os mesmos endpoints com melhorias:
@@ -460,10 +515,5 @@ Invoke-RestMethod -Uri "http://localhost:5000/api/v1/users" -Method Post -Body $
 
 Este projeto é de código aberto para fins educacionais.
 
-## 👥 Contribuindo
 
-Contribuições são bem-vindas! Sinta-se à vontade para abrir issues ou pull requests.
 
-## 📞 Suporte
-
-Para dúvidas ou suporte, entre em contato através do email: suporte@exemplo.com

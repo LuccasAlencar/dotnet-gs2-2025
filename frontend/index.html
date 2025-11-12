@@ -17,7 +17,7 @@
         <section class="upload-section">
             <h2>📄 Upload de Currículo</h2>
             <div class="upload-area" id="uploadArea">
-                <input type="file" id="curriculoInput" accept=".pdf,.doc,.docx,.txt" hidden>
+                <input type="file" id="curriculoInput" accept=".pdf" hidden>
                 <label for="curriculoInput" class="upload-label">
                     <span class="upload-icon">📎</span>
                     <span id="fileName">Clique para selecionar seu currículo</span>
@@ -26,6 +26,8 @@
             <div id="curriculoInfo" class="curriculo-info hidden">
                 <p><strong>Palavras-chave extraídas:</strong></p>
                 <div id="keywords" class="keywords"></div>
+                <p id="locationsTitle" class="hidden"><strong>Localizações sugeridas:</strong></p>
+                <div id="locations" class="keywords"></div>
             </div>
         </section>
 
@@ -40,15 +42,6 @@
                 <div class="form-group">
                     <label for="localizacao">Localização:</label>
                     <input type="text" id="localizacao" placeholder="Ex: são paulo, brasil" value="brasil">
-                </div>
-                <div class="form-group">
-                    <label for="categoria">Categoria:</label>
-                    <select id="categoria">
-                        <option value="it-jobs">TI / Tecnologia</option>
-                        <option value="engineering-jobs">Engenharia</option>
-                        <option value="sales-jobs">Vendas</option>
-                        <option value="admin-jobs">Administrativo</option>
-                    </select>
                 </div>
                 <button type="submit" class="btn-search">Buscar Vagas</button>
             </form>
