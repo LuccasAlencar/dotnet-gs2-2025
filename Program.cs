@@ -61,6 +61,9 @@ try
         client.BaseAddress = new Uri("https://router.huggingface.co/hf-inference/");
         client.Timeout = TimeSpan.FromSeconds(60);
     });
+    
+    // Registrar o serviço de sugestão de cargos
+    builder.Services.AddScoped<IJobSuggestionService, JobSuggestionService>();
 
     // Configuração de CORS
     builder.Services.AddCors(options =>

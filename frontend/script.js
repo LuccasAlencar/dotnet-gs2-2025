@@ -71,13 +71,12 @@ async function extractKeywordsFromCurriculo(file) {
             document.getElementById('localizacao').value = suggestedLocation;
         }
 
-        const query = buildSearchQuery(extractedKeywords);
-        document.getElementById('cargo').value = query;
-
+        // Não preenchemos o campo aqui, vamos esperar pelo retorno da sugestão de cargo
         curriculoInfo.classList.remove('hidden');
 
-        if (query) {
-            await buscarVagas(query, document.getElementById('localizacao').value.trim());
+        // Buscar vagas usando as skills extraídas
+        if (extractedKeywords.length > 0) {
+            await buscarVagas(buildSearchQuery(extractedKeywords), document.getElementById('localizacao').value.trim());
         }
     } catch (error) {
         console.error('Erro ao processar currículo:', error);
@@ -113,19 +112,61 @@ async function buscarVagas(cargo, localizacao) {
         loading.classList.remove('hidden');
         resultsSection.classList.add('hidden');
         
-        // Fazer requisição para a API
-        const response = await fetch(`${API_BASE_URL}/jobs/search`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                cargo: cargo,
-                localizacao: localizacao || 'brasil',
-                pagina: 1,
-                resultadosPorPagina: 20
-            })
-        });
+        // Verificar se estamos usando habilidades extraídas do currículo
+        const isUsingExtractedSkills = extractedKeywords.length > 0 && 
+            cargo === buildSearchQuery(extractedKeywords);
+        
+        let response;
+        
+        if (isUsingExtractedSkills) {
+            // Usar o endpoint AI que sugere cargos com base nas habilidades
+            console.log('Usando endpoint AI com habilidades:', extractedKeywords);
+            response = await fetch(`${API_BASE_URL}/jobs/search/skills`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    habilidades: extractedKeywords,
+                    localizacao: localizacao || 'brasil',
+                    pagina: 1,
+                    resultadosPorPagina: 20
+                })
+            });
+            
+            // Solicitar o cargo sugerido para atualizar o campo de busca
+            const suggestResponse = await fetch(`${API_BASE_URL}/jobs/suggest-jobs`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(extractedKeywords)
+            });
+            
+            if (suggestResponse.ok) {
+                const cargosSugeridos = await suggestResponse.json();
+                if (cargosSugeridos && cargosSugeridos.length > 0) {
+                    // Atualizar o campo de busca com o cargo sugerido
+                    document.getElementById('cargo').value = cargosSugeridos[0];
+                    console.log('Campo de busca atualizado com cargo sugerido:', cargosSugeridos[0]);
+                }
+            }
+        } else {
+            // Usar o endpoint padrão com texto de busca direto
+            console.log('Usando endpoint padrão com texto:', cargo);
+            response = await fetch(`${API_BASE_URL}/jobs/search`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    cargo: cargo,
+                    localizacao: localizacao || 'brasil',
+                    pagina: 1,
+                    resultadosPorPagina: 20
+                })
+            });
+        }
         
         if (!response.ok) {
             throw new Error('Erro ao buscar vagas');
