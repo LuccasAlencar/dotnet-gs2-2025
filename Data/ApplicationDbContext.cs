@@ -16,7 +16,7 @@ public class ApplicationDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Configuração adicional para Oracle/MySQL
+        // Configuração adicional para Oracle
         modelBuilder.Entity<User>(entity =>
         {
             entity.ToTable("USERS");
