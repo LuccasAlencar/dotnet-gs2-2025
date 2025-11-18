@@ -15,6 +15,10 @@ API RESTful para busca de vagas de emprego usando Adzuna API, com gerenciamento 
 - [Health Checks](#health-checks)
 - [Logging e Observabilidade](#logging-e-observabilidade)
 - [HATEOAS](#hateoas)
+- [CRUD - Exemplo em JSON](#crud---exemplo-em-json)
+- [Variáveis de Ambiente](#variáveis-de-ambiente)
+- [Scripts e Infraestrutura](#scripts-e-infraestrutura)
+- [Arquitetura Macro (Mermaid JS)](#arquitetura-macro-mermaid-js)
 
 ## 🚀 Características
 
@@ -450,6 +454,89 @@ Todos os endpoints retornam links HATEOAS para navegação pela API.
 - `previous`: Página anterior (paginação)
 - `first`: Primeira página (paginação)
 - `last`: Última página (paginação)
+
+## 🗂️ CRUD - Exemplo em JSON
+
+### Usuário (User)
+```json
+{
+  "id": 1,
+  "full_name": "Admin User",
+  "email": "admin@example.com",
+  "password_hash": "<hash>",
+  "phone": "11999999999",
+  "location": "São Paulo, SP",
+  "date_of_birth": "1990-01-01",
+  "bio": "Administrator",
+  "profile_picture_url": "https://...",
+  "is_active": true,
+  "created_at": "2025-11-18T10:00:00Z"
+}
+```
+
+### Currículo (Resume)
+```json
+{
+  "id": 1,
+  "user_id": 1,
+  "file_url": "https://...",
+  "full_text": "Texto extraído do PDF...",
+  "skills": ["C#", ".NET", "Azure"],
+  "experience": ["Desenvolvedor .NET", "Analista de Sistemas"],
+  "education": ["FIAP", "USP"],
+  "extracted_at": "2025-11-18T10:00:00Z"
+}
+```
+
+### Vaga (Job)
+```json
+{
+  "id": 1,
+  "external_id": "adzuna-123",
+  "title": "Desenvolvedor .NET",
+  "company": "Empresa X",
+  "description": "Atuar com .NET 8 e Azure...",
+  "location": "São Paulo, SP",
+  "job_type": "CLT",
+  "salary_min": 7000.00,
+  "salary_max": 12000.00,
+  "currency": "BRL",
+  "url": "https://adzuna.com/job/123",
+  "source": "Adzuna",
+  "created_at": "2025-11-18T10:00:00Z"
+}
+```
+
+## 🛡️ Variáveis de Ambiente
+- Todas as credenciais e dados sensíveis devem ser configurados via Variable Group no Azure DevOps.
+- Nunca versionar secrets no repositório.
+- Exemplo de variáveis:
+  - DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+  - ASPNETCORE_ENVIRONMENT
+  - Connection strings protegidas
+
+## 📦 Scripts e Infraestrutura
+- Scripts de provisionamento: `/scripts/script-infra.sh` e `/scripts/script-infra.cmd`
+- Script de banco de dados: `/scripts/script-bd.sql`
+- Dockerfile: `/Dockerfile`
+- Pipeline: `/azure-pipelines.yml`
+
+## 🗺️ Arquitetura Macro (Mermaid JS)
+```mermaid
+flowchart TD
+    subgraph Azure
+        ACR[Azure Container Registry]
+        ACI[Azure Container Instance]
+        MYSQL[Azure Database for MySQL]
+        Storage[Azure Storage]
+    end
+    Dev[DevOps Pipeline]
+    Dev -->|Build & Push| ACR
+    ACR -->|Deploy| ACI
+    ACI -->|Conecta| MYSQL
+    ACI -->|Salva artefatos| Storage
+    User[Usuário] -->|HTTP| ACI
+```
 
 ## 📝 Exemplos de Uso
 
