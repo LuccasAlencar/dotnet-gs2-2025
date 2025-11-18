@@ -1,12 +1,13 @@
 # Users API Buscadora de Vagas - .NET 8
 
-API RESTful para busca de vagas de emprego usando Adzuna API, com gerenciamento de usuários e análise de currículo. Desenvolvida em .NET 8 com Oracle Database, seguindo as melhores práticas de desenvolvimento e arquitetura de software.
+API RESTful para busca de vagas de emprego usando Adzuna API, com gerenciamento de usuários e análise de currículo. Desenvolvida em .NET 8 com Oracle Database (compatível com MySQL 8 em container), seguindo as melhores práticas de desenvolvimento e arquitetura de software.
 
 ## 📋 Índice
 
 - [Características](#características)
 - [Tecnologias](#tecnologias)
 - [Arquitetura](#arquitetura)
+- [DevOps & Cloud](#-devops--cloud)
 - [Pré-requisitos](#pré-requisitos)
 - [Configuração](#configuração)
 - [Executando o Projeto](#executando-o-projeto)
@@ -37,7 +38,7 @@ API RESTful para busca de vagas de emprego usando Adzuna API, com gerenciamento 
 - ✅ **Versionamento por Query String**: Suporte via `?api-version=1.0`
 
 ### 4. Integração e Persistência
-- ✅ **Oracle Database**: Integração completa com Oracle
+- ✅ **Oracle / MySQL Database**: Integração completa com Oracle (on-prem) e MySQL 8 no Azure Container Instance
 - ✅ **Entity Framework Core**: ORM moderno e eficiente
 - ✅ **Repository Pattern**: Separação de responsabilidades
 - ✅ **BCrypt**: Hash seguro de senhas
@@ -56,6 +57,7 @@ API RESTful para busca de vagas de emprego usando Adzuna API, com gerenciamento 
 - **.NET 8**: Framework principal
 - **ASP.NET Core**: Web API
 - **Oracle Database**: Banco de dados relacional
+- **MySQL 8 (ACI)**: Alternativa containerizada para produção
 - **Entity Framework Core**: ORM
 - **Serilog**: Logging estruturado
 - **OpenTelemetry**: Observabilidade e tracing
@@ -113,11 +115,93 @@ dotnet-gs2-2025/
 └── Program.cs                     # Configuração da aplicação
 ```
 
+### Desenho macro (Mermaid)
+
+```mermaid
+flowchart LR
+    Dev[(GitHub<br/>dotnet-gs2-2025)]
+    Boards[[Azure Boards<br/>Work Items]]
+    Pipelines[[Azure Pipelines<br/>CI/CD]]
+    ACR[(Azure Container Registry)]
+    ACIApp[[Azure Container Instance<br/>API .NET 8]]
+    ACIDb[[Azure Container Instance<br/>MySQL 8.0]]
+    Users((Usuários / Frontend))
+
+    Dev -->|commit / PR| Pipelines
+    Boards -->|link| Pipelines
+    Pipelines -->|artefato + testes| Pipelines
+    Pipelines -->|imagem| ACR
+    ACR -->|pull| Pipelines
+    Pipelines -->|release| ACIApp
+    ACIApp -->|TCP 3306| ACIDb
+    Users -->|HTTPS 8080| ACIApp
+```
+
+## ☁️ DevOps & Cloud
+
+- **Provisionamento**: `scripts/script-infra-aci.sh` cria Resource Group, ACR, Storage + File Share, ACI para MySQL (imagem oficial `mysql:8.0`) e um container placeholder da API. Execute após exportar as variáveis sensíveis:
+
+  ```bash
+  export MYSQL_ROOT_PASSWORD='SenhaRaizForte!'
+  export MYSQL_PASSWORD='SenhaAplicacao!'
+  ./scripts/script-infra-aci.sh
+  ```
+
+  Parâmetros como `PREFIX`, `LOCATION`, `ACR_NAME` podem ser sobrescritos via variáveis de ambiente.
+
+- **Banco**: `scripts/script-bd.sql` provisiona o schema (tabelas `USERS`, `RESUMES`, `JOB_SEARCH_AUDIT`) no MySQL/ACI. O script é executado automaticamente pela pipeline de release antes do primeiro deploy, mas pode ser aplicado manualmente:
+
+  ```bash
+  mysql -h <fqdn-mysql> -u dotnet_api -p < scripts/script-bd.sql
+  ```
+
+- **Dockerfiles**: `dockerfiles/Dockerfile.api` gera a imagem multi-stage (SDK + ASP.NET runtime) publicada no ACR e utilizada pelo Azure Container Instance do ambiente.
+
+- **Azure Boards + Branch Policy**:
+  - Crie a tarefa inicial no Boards e use o padrão `feature/RM556152-<ID>` para o branch.
+  - Vincule commits usando `git commit -m "Implementa build #123"`.
+  - Proteja a branch `main` exigindo: _Reviewer obrigatório_, _Work Item linkado_, _Default reviewer `RM 556152`_, _Merge somente via PR_. Você pode manter "Permitir auto-aprovação" habilitado para simular o cenário do curso.
+
+- **Pipelines (azure-pipelines.yml)**:
+  1. **Build** (executa após merge em `main`): restaura, builda, roda testes (`dotnet test`), publica resultados TRX e o artefato `drop`.
+  2. **ContainerImage**: builda e envia `dockerfiles/Dockerfile.api` para o ACR (`<acr>.azurecr.io/dotnet-gs2-api:<buildId>` + `latest`).
+  3. **Release**: após a imagem, o AzureCLI recria o container da API no ACI usando os recursos provisionados pelo script. Isso garante deploy automático assim que um novo artefato é gerado.
+
+- **Variáveis protegidas**: crie um Variable Group `dotnet-gs2-secrets` (linkado ao pipeline) contendo:
+
+  | Variável | Exemplo |
+  |----------|---------|
+  | `ADZUNA_APP_ID` | `xxxxxxxx` |
+  | `ADZUNA_APP_KEY` | (secreto) |
+  | `HUGGINGFACE__TOKEN` | (secreto) |
+  | `MYSQL_DATABASE` | `dotnetgs2` |
+  | `MYSQL_USER` | `dotnet_api` |
+  | `MYSQL_PASSWORD` | (secreto) |
+
+- **Service Connection**: Atualize o valor da variável `azureSubscription` no YAML para o nome do Service Connection que tem acesso ao Resource Group criado pelo script.
+
+- **Release automático**: não há stage manual; qualquer Build bem-sucedido em `main` dispara a Release e recria o container com a nova versão.
+
+### CRUD exposto em JSON
+
+```json
+{
+  "create": { "method": "POST", "path": "/api/v1/users" },
+  "read":   { "method": "GET", "path": "/api/v1/users/{id}" },
+  "update": { "method": "PUT", "path": "/api/v1/users/{id}" },
+  "delete": { "method": "DELETE", "path": "/api/v1/users/{id}" },
+  "list":   { "method": "GET", "path": "/api/v1/users?page=1&pageSize=10" }
+}
+```
+
+
 ## 📦 Pré-requisitos
 
 - **.NET 8 SDK**: [Download](https://dotnet.microsoft.com/download/dotnet/8.0)
-- **Oracle Database**: Versão 11g ou superior
+- **Oracle Database**: Versão 11g ou superior (se optar por Oracle)
 - **Oracle Client**: Oracle Data Provider for .NET
+- **MySQL 8**: Rodar via Docker/ACI (para o deploy em nuvem)
+- **Azure CLI 2.63+**: Necessário para os scripts de provisionamento
 
 ## ⚙️ Configuração
 
@@ -133,6 +217,9 @@ cd dotnet-gs2-2025
 Crie um arquivo `.env` na raiz do projeto com suas credenciais:
 
 ```env
+# Database Provider
+DB_PROVIDER=mysql
+
 # Adzuna API Credentials
 ADZUNA_APP_ID=seu_app_id_aqui
 ADZUNA_APP_KEY=seu_app_key_aqui
@@ -140,18 +227,27 @@ ADZUNA_APP_KEY=seu_app_key_aqui
 # Hugging Face
 HUGGINGFACE__TOKEN=seu_token_hugging_face
 
-# Oracle Database Credentials
+# MySQL (Azure Container Instance)
+MYSQL_HOST=aci-rm556152-mysql.brazilsouth.azurecontainer.io
+MYSQL_PORT=3306
+MYSQL_DATABASE=dotnetgs2
+MYSQL_USER=dotnet_api
+MYSQL_PASSWORD=sua_senha_mysql
+
+# Oracle Database Credentials (opcional)
 ORACLE_USER_ID=seu_usuario
 ORACLE_PASSWORD=sua_senha
 ORACLE_DATA_SOURCE=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=host)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=orcl)))
 ```
+
+Defina `DB_PROVIDER=oracle` se preferir manter a integração com Oracle. Para o ambiente em nuvem (ACI + MySQL), mantenha `DB_PROVIDER=mysql` e ajuste os hosts/FQDN gerados pelo script de infraestrutura.
 
 **Obtenha suas credenciais Adzuna em**: https://developer.adzuna.com/
 **Token da API Hugging Face**: https://huggingface.co/settings/tokens
 
 ### 3. Certifique-se que a tabela existe no banco
 
-A tabela `users` deve existir no banco de dados Oracle:
+Se estiver usando **Oracle**, garanta que a tabela `USERS` existe no schema:
 
 ```sql
 CREATE TABLE users (
@@ -164,6 +260,8 @@ CREATE TABLE users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+Se estiver usando **MySQL/ACI**, basta executar `scripts/script-bd.sql` (manual ou via pipeline) para criar as mesmas tabelas.
 
 ### 4. Restaure os pacotes
 

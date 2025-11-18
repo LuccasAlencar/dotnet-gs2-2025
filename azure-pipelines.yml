@@ -1,0 +1,217 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+- group: dotnet-gs2-secrets
+
+- name: azureSubscription
+  value: 'svc-dotnet-gs2'
+- name: resourceGroup
+  value: 'rg-rm556152-devops'
+- name: location
+  value: 'brazilsouth'
+- name: acrName
+  value: 'acrrm556152devops'
+- name: imageRepository
+  value: 'dotnet-gs2-api'
+- name: dockerfilePath
+  value: 'dockerfiles/Dockerfile.api'
+- name: artifactName
+  value: 'drop'
+- name: apiContainerName
+  value: 'aci-rm556152-api'
+- name: apiDnsLabel
+  value: 'aci-rm556152-api'
+- name: mysqlDnsLabel
+  value: 'aci-rm556152-mysql'
+- name: apiPort
+  value: '8080'
+
+stages:
+- stage: Build
+  displayName: 'Build, Test & Publish'
+  jobs:
+    - job: Dotnet
+      steps:
+        - checkout: self
+          clean: true
+
+        - task: UseDotNet@2
+          displayName: 'Install .NET 8 SDK'
+          inputs:
+            packageType: sdk
+            version: 8.x
+
+        - script: |
+            dotnet restore
+            dotnet build --configuration Release --no-restore
+          displayName: 'Restore & Build'
+
+        - script: |
+            dotnet test --configuration Release \
+              --no-build \
+              --logger trx \
+              --results-directory $(Agent.TempDirectory)/test-results
+          displayName: 'Run automated tests'
+
+        - task: PublishTestResults@2
+          inputs:
+            testResultsFormat: VSTest
+            testResultsFiles: '$(Agent.TempDirectory)/test-results/*.trx'
+            failTaskOnFailedTests: true
+            testRunTitle: 'dotnet-gs2-2025'
+
+        - script: |
+            dotnet publish dotnet-gs2-2025.csproj \
+              --configuration Release \
+              --no-build \
+              --output $(Build.ArtifactStagingDirectory)/publish
+          displayName: 'Publish binaries'
+
+        - task: PublishBuildArtifacts@1
+          displayName: 'Publish build artifact'
+          inputs:
+            PathtoPublish: '$(Build.ArtifactStagingDirectory)/publish'
+            ArtifactName: '$(artifactName)'
+            publishLocation: 'Container'
+
+- stage: ContainerImage
+  displayName: 'Docker Build & Push'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+    - job: Docker
+      steps:
+        - checkout: self
+
+        - task: AzureCLI@2
+          displayName: 'Build & push Docker image'
+          inputs:
+            azureSubscription: '$(azureSubscription)'
+            scriptType: bash
+            scriptLocation: inlineScript
+            inlineScript: |
+              set -euo pipefail
+              IMAGE_TAG=$(Build.BuildId)
+              IMAGE=$(acrName).azurecr.io/$(imageRepository)
+
+              echo "🔐 Login no ACR $(acrName)..."
+              az acr login --name $(acrName)
+
+              echo "🏗️  Build da imagem..."
+              docker build \
+                -f $(dockerfilePath) \
+                -t ${IMAGE}:${IMAGE_TAG} \
+                -t ${IMAGE}:latest \
+                .
+
+              echo "📤 Enviando para o ACR..."
+              docker push ${IMAGE}:${IMAGE_TAG}
+              docker push ${IMAGE}:latest
+
+              echo "##vso[task.setvariable variable=IMAGE_TAG;isOutput=true]${IMAGE_TAG}"
+          name: DockerBuild
+
+- stage: Release
+  displayName: 'Deploy to Azure Container Instance'
+  dependsOn: ContainerImage
+  condition: succeeded()
+  jobs:
+    - deployment: DeployACI
+      displayName: 'Deploy API container'
+      environment: production
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - checkout: self
+
+              - task: AzureCLI@2
+                displayName: 'Aplicar script SQL no MySQL (ACI)'
+                inputs:
+                  azureSubscription: '$(azureSubscription)'
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    set -euo pipefail
+                    MYSQL_HOST="$(mysqlDnsLabel).$(location).azurecontainer.io"
+
+                    echo "🛠️ Instalando cliente MySQL..."
+                    sudo apt-get update -y >/dev/null
+                    sudo apt-get install -y mysql-client >/dev/null
+
+                    echo "💾 Executando script SQL..."
+                    mysql -h ${MYSQL_HOST} -P 3306 \
+                         -u $(MYSQL_USER) \
+                         -p"$(MYSQL_PASSWORD)" \
+                         < scripts/script-bd.sql
+
+              - task: AzureCLI@2
+                displayName: 'Deploy container to ACI'
+                inputs:
+                  azureSubscription: '$(azureSubscription)'
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    set -euo pipefail
+
+                    IMAGE=$(acrName).azurecr.io/$(imageRepository)
+                    TAG=$(Build.BuildId)
+                    MYSQL_HOST="$(mysqlDnsLabel).$(location).azurecontainer.io"
+
+                    echo "🔑 Obtendo credenciais do ACR..."
+                    ACR_USERNAME=$(az acr credential show \
+                      --name $(acrName) \
+                      --query "username" -o tsv)
+                    ACR_PASSWORD=$(az acr credential show \
+                      --name $(acrName) \
+                      --query "passwords[0].value" -o tsv)
+
+                    echo "🧹 Removendo container anterior (se existir)..."
+                    az container delete \
+                      --resource-group $(resourceGroup) \
+                      --name $(apiContainerName) \
+                      --yes >/dev/null 2>&1 || true
+
+                    echo "🚀 Criando novo container..."
+                    az container create \
+                      --resource-group $(resourceGroup) \
+                      --name $(apiContainerName) \
+                      --image ${IMAGE}:${TAG} \
+                      --registry-login-server $(acrName).azurecr.io \
+                      --registry-username ${ACR_USERNAME} \
+                      --registry-password ${ACR_PASSWORD} \
+                      --dns-name-label $(apiDnsLabel) \
+                      --ports $(apiPort) \
+                      --os-type Linux \
+                      --cpu 1 \
+                      --memory 2 \
+                      --restart-policy Always \
+                      --environment-variables \
+                        ASPNETCORE_ENVIRONMENT=Production \
+                        ASPNETCORE_URLS=http://+:$(apiPort) \
+                        DB_PROVIDER=mysql \
+                        MYSQL_HOST=${MYSQL_HOST} \
+                        MYSQL_PORT=3306 \
+                        MYSQL_DATABASE=$(MYSQL_DATABASE) \
+                        MYSQL_USER=$(MYSQL_USER) \
+                        ADZUNA__APPID=$(ADZUNA_APP_ID) \
+                      --secure-environment-variables \
+                        MYSQL_PASSWORD=$(MYSQL_PASSWORD) \
+                        ADZUNA__APPKEY=$(ADZUNA_APP_KEY) \
+                        HUGGINGFACE__TOKEN=$(HUGGINGFACE__TOKEN)
+
+                    echo "🔍 Recuperando endpoint..."
+                    az container show \
+                      --resource-group $(resourceGroup) \
+                      --name $(apiContainerName) \
+                      --query "{FQDN:ipAddress.fqdn, State:instanceView.state}" \
+                      -o table
+

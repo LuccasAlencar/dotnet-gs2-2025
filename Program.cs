@@ -32,18 +32,55 @@ try
     // Configurar Serilog
     builder.Host.UseSerilog();
 
-    // Configuração do Oracle Database
-    // Prioridade: .env > appsettings.json
-    var oracleUserId = Environment.GetEnvironmentVariable("ORACLE_USER_ID");
-    var oraclePassword = Environment.GetEnvironmentVariable("ORACLE_PASSWORD");
-    var oracleDataSource = Environment.GetEnvironmentVariable("ORACLE_DATA_SOURCE");
-    
-    var connectionString = !string.IsNullOrEmpty(oracleUserId) && !string.IsNullOrEmpty(oraclePassword)
-        ? $"User Id={oracleUserId};Password={oraclePassword};Data Source={oracleDataSource};"
-        : builder.Configuration.GetConnectionString("OracleConnection");
-    
-    builder.Services.AddDbContext<ApplicationDbContext>(options =>
-        options.UseOracle(connectionString));
+    // Configuração de banco de dados (Oracle ou MySQL via variável DB_PROVIDER)
+    var dbProvider = Environment.GetEnvironmentVariable("DB_PROVIDER")?.ToLowerInvariant()
+        ?? builder.Configuration.GetValue<string>("DatabaseProvider")?.ToLowerInvariant()
+        ?? "oracle";
+
+    var healthChecksBuilder = builder.Services.AddHealthChecks();
+
+    if (dbProvider == "mysql")
+    {
+        var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST") ?? "localhost";
+        var mysqlPort = Environment.GetEnvironmentVariable("MYSQL_PORT") ?? "3306";
+        var mysqlDb = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "dotnetgs2";
+        var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "dotnet_api";
+        var mysqlPassword = Environment.GetEnvironmentVariable("MYSQL_PASSWORD");
+        var mysqlConnectionEnv = Environment.GetEnvironmentVariable("MYSQL_CONNECTION_STRING");
+
+        var mysqlConnection = !string.IsNullOrEmpty(mysqlConnectionEnv)
+            ? mysqlConnectionEnv!
+            : builder.Configuration.GetConnectionString("MySqlConnection") ??
+              $"Server={mysqlHost};Port={mysqlPort};Database={mysqlDb};User={mysqlUser};Password={mysqlPassword};";
+
+        builder.Services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseMySql(mysqlConnection, ServerVersion.AutoDetect(mysqlConnection)));
+
+        healthChecksBuilder.AddMySql(
+            mysqlConnection,
+            name: "mysql-database",
+            timeout: TimeSpan.FromSeconds(5),
+            tags: new[] { "db", "mysql", "database", "ready" });
+    }
+    else
+    {
+        var oracleUserId = Environment.GetEnvironmentVariable("ORACLE_USER_ID");
+        var oraclePassword = Environment.GetEnvironmentVariable("ORACLE_PASSWORD");
+        var oracleDataSource = Environment.GetEnvironmentVariable("ORACLE_DATA_SOURCE");
+
+        var oracleConnection = !string.IsNullOrEmpty(oracleUserId) && !string.IsNullOrEmpty(oraclePassword)
+            ? $"User Id={oracleUserId};Password={oraclePassword};Data Source={oracleDataSource};"
+            : builder.Configuration.GetConnectionString("OracleConnection");
+
+        builder.Services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseOracle(oracleConnection));
+
+        healthChecksBuilder.AddOracle(
+            oracleConnection!,
+            name: "oracle-database",
+            timeout: TimeSpan.FromSeconds(3),
+            tags: new[] { "db", "oracle", "database", "ready" });
+    }
 
     // Dependency Injection
     builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -93,13 +130,6 @@ try
     });
 
     // Health Checks
-    builder.Services.AddHealthChecks()
-        .AddOracle(
-            connectionString!,
-            name: "oracle-database",
-            timeout: TimeSpan.FromSeconds(3),
-            tags: new[] { "db", "oracle", "database" });
-
     // OpenTelemetry (Tracing)
     builder.Services.AddOpenTelemetry()
         .WithTracing(tracerProviderBuilder =>
@@ -121,7 +151,7 @@ try
         {
             Title = "Users API - V1",
             Version = "v1",
-            Description = "API RESTful buscadora de vagas com Adzuna, desenvolvida em .NET 8 com Oracle Database. ",
+            Description = "API RESTful buscadora de vagas com Adzuna, desenvolvida em .NET 8 com Oracle/MySQL.",
             Contact = new OpenApiContact
             {
                 Name = "Suporte API",
@@ -133,7 +163,7 @@ try
         {
             Title = "Users API - V2",
             Version = "v2",
-            Description = "API RESTful buscadora de vagas com Adzuna, desenvolvida em .NET 8 com Oracle Database. - Versão 2 (Melhorada)",
+            Description = "API RESTful buscadora de vagas com Adzuna, desenvolvida em .NET 8 com Oracle/MySQL - Versão 2",
             Contact = new OpenApiContact
             {
                 Name = "Suporte API",
