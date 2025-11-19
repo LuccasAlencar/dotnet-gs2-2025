@@ -86,7 +86,7 @@ $RECYCLE.BIN/
 # Credenciais e Segurança
 .mysql-credentials
 .azure-credentials
-infrastructure-output.env
+.env
 *.credentials
 *.secrets
 *.key
