@@ -35,7 +35,8 @@ try
     builder.Host.UseSerilog();
 
     // Detectar qual banco de dados usar
-    // Prioridade: MYSQL_HOST (Azure) > ORACLE_DATA_SOURCE (Local) > appsettings.json
+    // Prioridade: FORCE_MYSQL (para migrations) > MYSQL_HOST (Azure) > ORACLE_DATA_SOURCE (Local) > appsettings.json
+    var forceMySQL = Environment.GetEnvironmentVariable("FORCE_MYSQL");
     var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST");
     var oracleDataSource = Environment.GetEnvironmentVariable("ORACLE_DATA_SOURCE");
     var oracleUserId = Environment.GetEnvironmentVariable("ORACLE_USER_ID");
@@ -43,7 +44,7 @@ try
     
     string connectionString = "";
     
-    if (!string.IsNullOrEmpty(mysqlHost))
+    if (!string.IsNullOrEmpty(forceMySQL) || !string.IsNullOrEmpty(mysqlHost))
     {
         // Usar MySQL (Azure)
         Log.Information("Usando Azure Database for MySQL");
@@ -183,6 +184,22 @@ try
     });
 
     var app = builder.Build();
+
+    // Aplicar migrations automaticamente na primeira execução
+    try
+    {
+        using (var scope = app.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Log.Information("Aplicando migrations do banco de dados...");
+            dbContext.Database.Migrate();
+            Log.Information("✅ Migrations aplicadas com sucesso");
+        }
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "❌ Erro ao aplicar migrations");
+    }
 
     // Middleware para logging de requisições
     app.UseSerilogRequestLogging();

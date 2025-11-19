@@ -222,29 +222,7 @@ fi
 echo -e "${GREEN}✅ Login realizado${NC}"
 echo ""
 
-# 7. Aplicar migrations do banco de dados
-echo -e "${BLUE}📊 [7/8] Aplicando migrations do banco de dados...${NC}"
-
-# Verificar se estamos na raiz do projeto
-if [ -f "../dotnet-gs2-2025.csproj" ]; then
-    cd ..
-    
-    # Criar migration se não existir
-    if [ ! -d "Migrations" ]; then
-        echo -e "${BLUE}🔧 Criando migration inicial...${NC}"
-        dotnet ef migrations add InitialCreate --context ApplicationDbContext 2>/dev/null || true
-    fi
-    
-    # Aplicar migrations
-    dotnet ef database update --context ApplicationDbContext 2>/dev/null || true
-    cd scripts
-    echo -e "${GREEN}✅ Migrations aplicadas${NC}"
-else
-    echo -e "${YELLOW}⚠️  Migrations serão aplicadas automaticamente na primeira execução${NC}"
-fi
-echo ""
-
-# 8. Build da imagem Docker
+# 7. Build da imagem Docker
 echo -e "${BLUE}🏗️  [8/8] Fazendo build da imagem Docker...${NC}"
 IMAGE_TAG="${REGISTRY_URL}/${IMAGE_NAME}"
 
