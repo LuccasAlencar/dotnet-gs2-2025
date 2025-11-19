@@ -11,6 +11,8 @@ using OpenTelemetry.Trace;
 using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using DotNetEnv;
+using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
+using Oracle.EntityFrameworkCore;
 
 // Carregar variáveis de ambiente do arquivo .env
 Env.Load();
@@ -32,18 +34,48 @@ try
     // Configurar Serilog
     builder.Host.UseSerilog();
 
-    // Configuração do Oracle Database
-    // Prioridade: .env > appsettings.json
+    // Detectar qual banco de dados usar
+    // Prioridade: MYSQL_HOST (Azure) > ORACLE_DATA_SOURCE (Local) > appsettings.json
+    var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST");
+    var oracleDataSource = Environment.GetEnvironmentVariable("ORACLE_DATA_SOURCE");
     var oracleUserId = Environment.GetEnvironmentVariable("ORACLE_USER_ID");
     var oraclePassword = Environment.GetEnvironmentVariable("ORACLE_PASSWORD");
-    var oracleDataSource = Environment.GetEnvironmentVariable("ORACLE_DATA_SOURCE");
     
-    var connectionString = !string.IsNullOrEmpty(oracleUserId) && !string.IsNullOrEmpty(oraclePassword)
-        ? $"User Id={oracleUserId};Password={oraclePassword};Data Source={oracleDataSource};"
-        : builder.Configuration.GetConnectionString("OracleConnection");
+    string connectionString = "";
     
-    builder.Services.AddDbContext<ApplicationDbContext>(options =>
-        options.UseOracle(connectionString));
+    if (!string.IsNullOrEmpty(mysqlHost))
+    {
+        // Usar MySQL (Azure)
+        Log.Information("Usando Azure Database for MySQL");
+        var mysqlPort = Environment.GetEnvironmentVariable("MYSQL_PORT") ?? "3306";
+        var mysqlDatabase = Environment.GetEnvironmentVariable("MYSQL_DATABASE");
+        var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER");
+        var mysqlPassword = Environment.GetEnvironmentVariable("MYSQL_PASSWORD");
+        
+        connectionString = $"Server={mysqlHost};Port={mysqlPort};Database={mysqlDatabase};Uid={mysqlUser};Pwd={mysqlPassword};SslMode=Required;";
+        
+        builder.Services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+    }
+    else if (!string.IsNullOrEmpty(oracleDataSource) && !string.IsNullOrEmpty(oracleUserId))
+    {
+        // Usar Oracle (Local)
+        Log.Information("Usando Oracle Database (Local)");
+        connectionString = $"User Id={oracleUserId};Password={oraclePassword};Data Source={oracleDataSource};";
+        
+        builder.Services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseOracle(connectionString));
+    }
+    else
+    {
+        // Fallback para appsettings.json
+        Log.Information("Usando configuração padrão do appsettings.json");
+        connectionString = builder.Configuration.GetConnectionString("MySqlConnection") 
+            ?? builder.Configuration.GetConnectionString("OracleConnection") ?? "";
+        
+        builder.Services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+    }
 
     // Dependency Injection
     builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -156,16 +188,13 @@ try
     app.UseSerilogRequestLogging();
 
     // Configure the HTTP request pipeline
-    if (app.Environment.IsDevelopment())
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
     {
-        app.UseSwagger();
-        app.UseSwaggerUI(c =>
-        {
-            c.SwaggerEndpoint("/swagger/v1/swagger.json", "Users API V1");
-            c.SwaggerEndpoint("/swagger/v2/swagger.json", "Users API V2");
-            c.RoutePrefix = string.Empty; // Swagger na raiz
-        });
-    }
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Users API V1");
+        c.SwaggerEndpoint("/swagger/v2/swagger.json", "Users API V2");
+        c.RoutePrefix = string.Empty; // Swagger na raiz
+    });
 
     // Health Check Endpoints
     app.MapHealthChecks("/health", new HealthCheckOptions

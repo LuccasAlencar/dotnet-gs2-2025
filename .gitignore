@@ -36,8 +36,8 @@ artifacts/
 logs/
 *.log
 
-# Environment variables
-.env
+# Environment variables (comentado - .env agora contém apenas valores não-sensíveis)
+# .env
 
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
@@ -82,3 +82,12 @@ $RECYCLE.BIN/
 
 # Mac
 .DS_Store
+
+# Credenciais e Segurança
+.mysql-credentials
+.azure-credentials
+infrastructure-output.env
+*.credentials
+*.secrets
+*.key
+*.pem

@@ -5,15 +5,20 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS builder
 
 WORKDIR /app
 
+# Limpar cache do NuGet
+RUN rm -rf /root/.nuget/packages && rm -rf /root/.cache
+
 # Copiar arquivo de projeto
 COPY dotnet-gs2-2025.csproj .
+
+# Restaurar dependências
 RUN dotnet restore "dotnet-gs2-2025.csproj"
 
 # Copiar código-fonte
 COPY . .
 
-# Build e Publish
-RUN dotnet publish "dotnet-gs2-2025.csproj" -c Release -o /app/publish --no-restore
+# Build e Publish (sem usar cache)
+RUN dotnet publish "dotnet-gs2-2025.csproj" -c Release -o /app/publish
 
 # Stage 2: Runtime
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
