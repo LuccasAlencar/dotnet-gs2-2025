@@ -1,611 +1,672 @@
-# Users API Buscadora de Vagas - .NET 8
+# 💼 Sistema de Gestão de Currículos - .NET API
 
-API RESTful para busca de vagas de emprego usando Adzuna API, com gerenciamento de usuários e análise de currículo. Desenvolvida em .NET 8 com Oracle Database, seguindo as melhores práticas de desenvolvimento e arquitetura de software e padrões RESTful.
+> **Projeto:** Global Solution FIAP 2025  
+> **Instituição:** FIAP - Faculdade de Informática e Administração Paulista  
+> **Curso:** Análise e Desenvolvimento de Sistemas
 
-## 📋 Índice
+---
 
-- [Características](#características)
-- [Tecnologias](#tecnologias)
-- [Arquitetura](#arquitetura)
-- [Pré-requisitos](#pré-requisitos)
-- [Configuração](#configuração)
-- [Executando o Projeto](#executando-o-projeto)
-- [Versionamento da API](#versionamento-da-api)
-- [Endpoints](#endpoints)
-- [Health Checks](#health-checks)
-- [Logging e Observabilidade](#logging-e-observabilidade)
-- [HATEOAS](#hateoas)
-- [CRUD - Exemplo em JSON](#crud---exemplo-em-json)
-- [Variáveis de Ambiente](#variáveis-de-ambiente)
-- [Scripts e Infraestrutura](#scripts-e-infraestrutura)
-- [Arquitetura Macro (Mermaid JS)](#arquitetura-macro-mermaid-js)
+## 👥 Equipe Responsável
 
-## 🚀 Características
+| RM | Nome |
+|---|---|
+| RM556152 | Daniel da Silva Barros |
+| RM558253 | Luccas de Alencar Rufino |
+| RM5550063 | Raul Clauson |
 
-### 1. Boas Práticas REST
-- ✅ **Paginação**: Suporte completo para paginação de resultados
-- ✅ **HATEOAS**: Hypermedia As The Engine Of Application State
-- ✅ **Status Codes**: Uso adequado de códigos HTTP (200, 201, 204, 400, 404, 409)
-- ✅ **Verbos HTTP**: GET, POST, PUT, DELETE corretamente implementados
-- ✅ **Validação de Dados**: Data Annotations e validações personalizadas
+---
 
-### 2. Monitoramento e Observabilidade
-- ✅ **Health Checks**: Endpoints de verificação de saúde da aplicação
-- ✅ **Logging**: Serilog com logs estruturados em Console e Arquivo
-- ✅ **Tracing**: OpenTelemetry para rastreamento distribuído
+## 📋 Descrição do Projeto
 
-### 3. Versionamento da API
-- ✅ **Múltiplas Versões**: Suporte para `/api/v1` e `/api/v2`
-- ✅ **Versionamento por URL**: Rotas versionadas
-- ✅ **Versionamento por Header**: Suporte via `X-API-Version`
-- ✅ **Versionamento por Query String**: Suporte via `?api-version=1.0`
+Sistema backend em **.NET 8** que gerencia currículos de candidatos, integrando-se com uma **API Python de IA** para análise inteligente de ocupações e extração de skills.
 
-### 4. Integração e Persistência
-- ✅ **Oracle Database**: Integração completa com Oracle
-- ✅ **Entity Framework Core**: ORM moderno e eficiente
-- ✅ **Repository Pattern**: Separação de responsabilidades
-- ✅ **BCrypt**: Hash seguro de senhas
-- ✅ **Adzuna API**: Busca de vagas de emprego em tempo real
-- ✅ **Variáveis de Ambiente**: Suporte a arquivo .env para credenciais
+### Funcionalidades Principais
 
-### 5. Frontend
-- ✅ **Interface Web**: HTML/CSS/JavaScript responsivo
-- ✅ **Upload de Currículo**: Extração de habilidades via Hugging Face
-- ✅ **Sugestão Automática**: Localização e palavras-chave preenchidas pelo currículo
-- ✅ **Busca de Vagas**: Disparo automático após upload (editável pelo usuário)
-- ✅ **Listagem de Resultados**: Cards informativos com link para vaga
+- 📄 **Upload de PDF**: Recebe currículos em PDF
+- 🔗 **Integração IA**: Chama API Python para análise
+- 💼 **Extração de Ocupação**: Identifica a profissão do candidato
+- 🎯 **Extração de Skills**: Detecta habilidades técnicas
+- 📊 **Matching de Vagas**: Calcula compatibilidade candidato-vaga
+- 👤 **Gestão de Usuários**: CRUD completo com banco Oracle
+- 🔍 **Busca de Vagas**: Integração com API Adzuna
 
-## 🛠️ Tecnologias
+---
 
-- **.NET 8**: Framework principal
-- **ASP.NET Core**: Web API
-- **Oracle Database**: Banco de dados relacional
-- **Entity Framework Core**: ORM
-- **Serilog**: Logging estruturado
-- **OpenTelemetry**: Observabilidade e tracing
-- **Swagger/OpenAPI**: Documentação interativa
-- **Asp.Versioning**: Versionamento de API
-- **Adzuna API**: API externa para busca de vagas
-- **DotNetEnv**: Gerenciamento de variáveis de ambiente
-- **HTML/CSS/JavaScript**: Frontend básico e responsivo
-
-## 🏗️ Arquitetura
-
-### Estrutura do Projeto
-
-```
-dotnet-gs2-2025/
-├── Controllers/                   # Controladores da API
-│   ├── V1/                       # API Versão 1
-│   │   ├── JobsController.cs     # Busca de vagas
-│   │   ├── ResumesController.cs  # Processamento de currículo
-│   │   └── UsersController.cs    # Gerenciamento de usuários
-│   ├── V2/                       # API Versão 2
-│   │   └── UsersController.cs    # Versão aprimorada de usuários
-│   └── HealthController.cs       # Health checks e monitoramento
-│
-├── Configuration/                 # Configurações da aplicação
-│   └── HuggingFaceOptions.cs     # Configurações do modelo IA
-│
-├── Data/                         # Camada de dados
-│   ├── ApplicationDbContext.cs   # Contexto do EF Core
-│   └── Migrations/               # Migrações do banco de dados
-│
-├── Models/                       # Modelos de domínio
-│   ├── HuggingFaceEntity.cs      # Entidades da API de IA
-│   ├── User.cs                   # Entidade de usuário
-│   └── DTOs/                     # Objetos de Transferência de Dados
-│       ├── Requests/             # DTOs de requisição
-│       │   ├── UserCreateDto.cs
-│       │   ├── UserUpdateDto.cs
-│       │   └── ResumeUploadRequestDto.cs
-│       ├── Responses/            # DTOs de resposta
-│       │   ├── JobDto.cs
-│       │   ├── UserResponseDto.cs
-│       │   ├── PagedResponse.cs
-│       │   └── SkillExtractionResponseDto.cs
-│       └── Shared/               # DTOs compartilhados
-│           ├── Link.cs           # Para HATEOAS
-│           └── ErrorResponse.cs  # Padrão de erros
-│
-├── Repositories/                 # Camada de acesso a dados
-│   ├── IUserRepository.cs        # Interface do repositório
-│   └── UserRepository.cs         # Implementação concreta
-│
-├── Services/                     # Lógica de negócios
-│   ├── Interfaces/               # Contratos de serviço
-│   │   ├── IUserService.cs
-│   │   ├── IJobService.cs
-│   │   └── IResumeService.cs
-│   ├── External/                 # Integrações externas
-│   │   ├── AdzunaService.cs
-│   │   └── HuggingFaceService.cs
-│   └── Implementations/          # Implementações dos serviços
-│       └── UserService.cs
-│
-└── frontend/                     # Interface do usuário
-    ├── index.html
-    ├── css/
-    └── js/
-```
-
-### Diagrama de Arquitetura
+## 🏗️ Arquitetura do Sistema
 
 ```mermaid
-graph TD
-    subgraph Client
-        UI[Interface Web]
-        Mobile[Aplicativo Móvel]
-    end
-
-    subgraph API[API .NET Core]
-        Controllers[Controladores]
-        Services[Serviços]
-        Repositories[Repositórios]
-        
-        Controllers -->|Usa| Services
-        Services -->|Usa| Repositories
-    end
-
-    subgraph ExternalServices[Serviços Externos]
-        Adzuna[Adzuna API]
-        HuggingFace[Hugging Face API]
-    end
-
-    subgraph Database
-        Oracle[(Oracle Database)]
-    end
-
-    UI -->|HTTP/HTTPS| API
-    Mobile -->|HTTP/HTTPS| API
+graph TB
+    A["Frontend<br/>HTML/CSS/JS<br/>LiveServer"] -->|HTTP| B["ASP.NET Core 8<br/>API REST<br/>porta 5000"]
     
-    API -->|Consulta| Adzuna
-    API -->|Processa| HuggingFace
+    B --> C["PdfTextExtractor<br/>Extrai texto"]
+    C --> D["PDF Upload"]
     
-    Repositories -->|Lê/Escreve| Oracle
-
-    classDef external fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef database fill:#9cf,stroke:#333,stroke-width:2px;
-    classDef api fill:#9f9,stroke:#333,stroke-width:2px;
+    B --> E["ResumeService<br/>Orquestrador"]
+    E --> F["Python API<br/>Flask<br/>porta 5001"]
     
-    class Adzuna,HuggingFace external;
-    class Oracle database;
-    class API api;
+    F --> G["SkillExtractionService<br/>BERT + Regex"]
+    F --> H["OccupationInferenceService<br/>CBO Dataset"]
+    
+    B --> I["UserService<br/>Gestão de Users"]
+    B --> J["JobService<br/>Busca Adzuna"]
+    
+    I --> K["Oracle Database<br/>on-premises<br/>oracle.fiap.com.br"]
+    
+    B -->|JSON| A
+    F -->|JSON| B
+    
+    style B fill:#512BD4,color:#fff
+    style A fill:#4CAF50,color:#fff
+    style F fill:#4CAF50,color:#fff
+    style K fill:#FF6F00,color:#fff
 ```
 
-### Padrões de Design
+---
 
-- **Clean Architecture**: Separação clara de responsabilidades
-- **Repository Pattern**: Abstração do acesso a dados
-- **Dependency Injection**: Injeção de dependências para baixo acoplamento
-- **DTO Pattern**: Transferência de dados entre camadas
-- **HATEOAS**: Hypermedia como mecanismo de navegação
+## 🚀 Começando
 
-### Boas Práticas de API REST
+### 1️⃣ **Pré-requisitos**
 
-1. **Verbos HTTP**
-   - `GET`: Recuperar recursos
-   - `POST`: Criar novos recursos
-   - `PUT`: Atualizar recursos existentes (substituição completa)
-   - `PATCH`: Atualização parcial de recursos
-   - `DELETE`: Remover recursos
+Instale:
+- **.NET 8 SDK** ou superior
+- **Visual Studio 2022** ou **Visual Studio Code**
+- **Git**
+- Acesso ao **Oracle Database** (oracle.fiap.com.br)
 
-2. **Códigos de Status HTTP**
-   - `200 OK`: Requisição bem-sucedida
-   - `201 Created`: Recurso criado com sucesso
-   - `204 No Content`: Sucesso sem conteúdo de retorno
-   - `400 Bad Request`: Requisição inválida
-   - `401 Unauthorized`: Não autenticado
-   - `403 Forbidden`: Autenticado mas não autorizado
-   - `404 Not Found`: Recurso não encontrado
-   - `409 Conflict`: Conflito (ex: email já cadastrado)
-   - `429 Too Many Requests`: Muitas requisições
-   - `500 Internal Server Error`: Erro inesperado
-
-3. **Versionamento**
-   - Suporte a múltiplas versões da API
-   - Versionamento por URL (`/api/v1/...`)
-   - Versionamento por header (`X-API-Version: 1.0`)
-   - Versionamento por query string (`?api-version=1.0`)
-
-4. **Respostas Padronizadas**
-   ```json
-   // Sucesso (200 OK)
-   {
-     "data": { ... },
-     "links": [
-       { "rel": "self", "href": "/api/v1/users/1", "method": "GET" },
-       { "rel": "update", "href": "/api/v1/users/1", "method": "PUT" }
-     ]
-   }
-
-   // Erro (400 Bad Request)
-   {
-     "type": "https://tools.ietf.org/html/rfc7231#section-6.5.1",
-     "title": "Bad Request",
-     "status": 400,
-     "traceId": "00-0e5c8a5f2f3e1b2a4c6d7e8f9a0b1c2d-1a2b3c4d5e6f7a8b-00",
-     "errors": {
-       "email": ["O campo Email é obrigatório"],
-       "password": ["A senha deve ter no mínimo 8 caracteres"]
-     }
-   }
-   ```
-
-5. **Paginação**
-   - Parâmetros: `page`, `pageSize`
-   - Exemplo: `/api/v1/users?page=1&pageSize=10`
-   - Resposta inclui metadados de paginação
-
-6. **Filtros e Ordenação**
-   - Filtros via query string
-   - Ordenação via parâmetro `sort`
-   - Exemplo: `/api/v1/jobs?location=sp&minSalary=5000&sort=-createdAt`
-│   └── ResumeExtraction.cs        # Entidades consolidadas do currículo
-├── Repositories/
-│   ├── IUserRepository.cs         # Interface do repositório
-│   └── UserRepository.cs          # Implementação do repositório
-├── Services/
-│   ├── IAdzunaService.cs          # Interface de vagas
-│   ├── IHuggingFaceService.cs     # Interface IA de habilidades
-│   ├── IResumeService.cs          # Interface processamento currículo
-│   ├── IUserService.cs            # Interface do serviço
-│   ├── AdzunaService.cs           # Integração com Adzuna
-│   ├── HuggingFaceService.cs      # Integração com Hugging Face
-│   ├── PdfTextExtractor.cs        # Leitura de texto em PDFs
-│   ├── ResumeService.cs           # Orquestra extração de habilidades
-│   └── UserService.cs             # Lógica de usuários
-├── logs/                          # Logs da aplicação
-├── appsettings.json               # Configurações
-└── Program.cs                     # Configuração da aplicação
-```
-
-## 📦 Pré-requisitos
-
-- **.NET 8 SDK**: [Download](https://dotnet.microsoft.com/download/dotnet/8.0)
-- **Oracle Database**: Versão 11g ou superior
-- **Oracle Client**: Oracle Data Provider for .NET
-
-## ⚙️ Configuração
-
-### 1. Clone o repositório
+### 2️⃣ **Clonar Repositório**
 
 ```bash
-git clone <url-do-repositorio>
+cd c:/Users/seu_usuario/Desktop/entregas-gs
+git clone <url_repositorio>
 cd dotnet-gs2-2025
 ```
 
-### 2. Configure as variáveis de ambiente
+### 3️⃣ **Configurar Variáveis de Ambiente (.env)**
 
-Crie um arquivo `.env` na raiz do projeto com suas credenciais:
+Crie arquivo `.env` na raiz do projeto com as credenciais:
 
-```env
-# Adzuna API Credentials
-ADZUNA_APP_ID=seu_app_id_aqui
-ADZUNA_APP_KEY=seu_app_key_aqui
+```bash
+# ============================================
+# ADZUNA API
+# ============================================
+ADZUNA_APP_ID=
+ADZUNA_APP_KEY=
 
-# Hugging Face
-HUGGINGFACE__TOKEN=seu_token_hugging_face
+# ============================================
+# HUGGING FACE
+# ============================================
+HUGGINGFACE__TOKEN=
 
-# Oracle Database Credentials
-ORACLE_USER_ID=seu_usuario
-ORACLE_PASSWORD=sua_senha
-ORACLE_DATA_SOURCE=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=host)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=orcl)))
+# ============================================
+# ORACLE DATABASE (On-Premises)
+# ============================================
+ORACLE_USER_ID=
+ORACLE_PASSWORD=
+ORACLE_DATA_SOURCE=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=oracle.fiap.com.br)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=orcl)))
 ```
 
-**Obtenha suas credenciais Adzuna em**: https://developer.adzuna.com/
-**Token da API Hugging Face**: https://huggingface.co/settings/tokens
-
-### 3. Certifique-se que a tabela existe no banco
-
-A tabela `users` deve existir no banco de dados Oracle:
-
-```sql
-CREATE TABLE users (
-    id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    name VARCHAR2(100) NOT NULL,
-    email VARCHAR2(150) UNIQUE NOT NULL,
-    password VARCHAR2(255) NOT NULL,
-    phone VARCHAR2(20),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-### 4. Restaure os pacotes
+### 4️⃣ **Restaurar Dependências e Compilar**
 
 ```bash
 dotnet restore
+dotnet build
 ```
 
-## Executando o Projeto
-
-### Modo Desenvolvimento
+### 5️⃣ **Executar a API**
 
 ```bash
 dotnet run
 ```
 
-A aplicação estará disponível em:
-- **HTTP**: http://localhost:5000
-- **Swagger UI**: http://localhost:5000 (raiz)
-
-### 5. Abra o Frontend
-
-Abra o arquivo `frontend/index.html` no seu navegador ou use um servidor web local:
-
-```bash
-# Se tiver Python instalado
-cd frontend
-python -m http.server 8080
+**Esperado:**
+```
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://localhost:5000
 ```
 
-Depois acesse: `http://localhost:8080`
+A API estará disponível em **http://localhost:5000**
 
-### Build para Produção
+---
 
-```bash
-dotnet build -c Release
-dotnet publish -c Release -o ./publish
-```
+## 📡 Endpoints da API
 
-## 🔄 Versionamento da API
+### Base URL: `http://localhost:5000/api/v1`
 
-A API suporta múltiplas formas de versionamento:
+---
 
-### 1. Via URL (Recomendado)
-```
-GET /api/v1/users
-GET /api/v2/users
-```
+### 👤 **Usuários** (`/users`)
 
-### 2. Via Header
-```
-GET /api/users
-X-API-Version: 1.0
-```
+#### 1. Criar Usuário
+```http
+POST /users
+Content-Type: application/json
 
-### 3. Via Query String
-```
-GET /api/users?api-version=1.0
-GET /api/users?api-version=2.0
-```
-
-## 📍 Endpoints
-
-### Versão 1 (v1)
-
-#### GET /api/v1/users
-Retorna lista paginada de usuários.
-
-**Query Parameters:**
-- `page` (int, default: 1): Número da página
-- `pageSize` (int, default: 10, max: 100): Tamanho da página
-
-**Resposta (200 OK):**
-```json
-{
-  "page": 1,
-  "pageSize": 10,
-  "totalItems": 100,
-  "totalPages": 10,
-  "data": [
-    {
-      "id": 1,
-      "name": "João Silva",
-      "email": "joao@email.com",
-      "phone": "(11) 98765-4321",
-      "createdAt": "2024-01-01T10:00:00Z",
-      "updatedAt": "2024-01-01T10:00:00Z",
-      "links": [
-        {
-          "href": "http://localhost:5000/api/v1/users/1",
-          "rel": "self",
-          "method": "GET"
-        },
-        {
-          "href": "http://localhost:5000/api/v1/users/1",
-          "rel": "update",
-          "method": "PUT"
-        },
-        {
-          "href": "http://localhost:5000/api/v1/users/1",
-          "rel": "delete",
-          "method": "DELETE"
-        }
-      ]
-    }
-  ],
-  "links": [
-    {
-      "href": "http://localhost:5000/api/v1/users?page=1&pageSize=10",
-      "rel": "self",
-      "method": "GET"
-    },
-    {
-      "href": "http://localhost:5000/api/v1/users?page=2&pageSize=10",
-      "rel": "next",
-      "method": "GET"
-    }
-  ]
-}
-```
-
-#### GET /api/v1/users/{id}
-Retorna um usuário específico.
-
-**Respostas:**
-- `200 OK`: Usuário encontrado
-- `404 Not Found`: Usuário não existe
-
-#### POST /api/v1/users
-Cria um novo usuário.
-
-**Body:**
-```json
 {
   "name": "João Silva",
-  "email": "joao@email.com",
-  "password": "senha123",
-  "phone": "(11) 98765-4321"
+  "email": "joao@example.com",
+  "password": "senha_segura_123",
+  "phone": "11999999999"
 }
 ```
 
-**Respostas:**
-- `201 Created`: Usuário criado com sucesso
-- `400 Bad Request`: Dados inválidos
-- `409 Conflict`: Email já cadastrado
-
-#### PUT /api/v1/users/{id}
-Atualiza um usuário existente.
-
-**Body (todos os campos são opcionais):**
+**Resposta:** `201 Created`
 ```json
 {
-  "name": "João Silva Atualizado",
-  "email": "joao.novo@email.com",
-  "password": "novaSenha123",
-  "phone": "(11) 98765-4321"
+  "id": 1,
+  "name": "João Silva",
+  "email": "joao@example.com",
+  "phone": "11999999999",
+  "createdAt": "2025-11-20T18:30:00Z",
+  "updatedAt": "2025-11-20T18:30:00Z"
 }
 ```
 
-**Respostas:**
-- `200 OK`: Usuário atualizado
-- `400 Bad Request`: Dados inválidos
-- `404 Not Found`: Usuário não existe
-- `409 Conflict`: Email já cadastrado
+---
 
-#### DELETE /api/v1/users/{id}
-Remove um usuário.
+#### 2. Listar Usuários
+```http
+GET /users
+```
 
-**Respostas:**
-- `204 No Content`: Usuário removido
-- `404 Not Found`: Usuário não existe
+**Resposta:** `200 OK`
+```json
+[
+  {
+    "id": 1,
+    "name": "João Silva",
+    "email": "joao@example.com",
+    "phone": "11999999999"
+  }
+]
+```
 
-#### POST /api/v1/resumes/skills
-Extrai habilidades de um currículo em PDF usando a IA Hugging Face.
+---
 
-**Form-Data:**
-- `file` (arquivo, obrigatório): Currículo em formato PDF (máx. 5MB)
+#### 3. Obter Usuário Específico
+```http
+GET /users/{id}
+```
 
-**Resposta (200 OK):**
+---
+
+#### 4. Atualizar Usuário
+```http
+PUT /users/{id}
+Content-Type: application/json
+
+{
+  "name": "João Silva Santos",
+  "email": "novo@example.com",
+  "phone": "11988888888"
+}
+```
+
+---
+
+#### 5. Deletar Usuário
+```http
+DELETE /users/{id}
+```
+
+---
+
+### 📄 **Currículos** (`/resumes`)
+
+#### 1. Upload e Análise Completa ⭐ **PRINCIPAL**
+```http
+POST /resumes/analyze
+Content-Type: multipart/form-data
+
+[Form Data]
+file: <arquivo PDF>
+```
+
+**Resposta:** `200 OK`
 ```json
 {
-  "skills": ["Java", "Spring", "SQL"],
-  "totalSkills": 3,
-  "textLength": 12345,
-  "locations": ["São Paulo", "Brasil"],
-  "suggestedLocation": "São Paulo",
+  "status": "success",
+  "resumeType": "technical",
+  "primaryOccupation": {
+    "titulo": "Desenvolvedor Python",
+    "codigo": "317105",
+    "score": 0.92,
+    "confidence": "high"
+  },
+  "skills": [
+    {
+      "skillName": "programação python",
+      "originalSkill": "Python",
+      "score": 0.95,
+      "confidence": "high"
+    }
+  ],
+  "totalSkillsFound": 12,
+  "successfulMatches": 10,
+  "processingTime": 2.345
+}
+```
+
+---
+
+#### 2. Extrair Skills do PDF
+```http
+POST /resumes/skills
+Content-Type: multipart/form-data
+
+[Form Data]
+file: <arquivo PDF>
+```
+
+**Resposta:** `200 OK`
+```json
+{
+  "skills": ["Python", "Django", "PostgreSQL", "Docker", "AWS"],
+  "totalSkills": 5,
+  "textLength": 1250,
   "metadata": {
     "fileName": "curriculo.pdf",
-    "fileSizeBytes": 345678
-  },
-  "links": [
-    {
-      "href": "http://localhost:5000/api/v1/resumes/skills",
-      "rel": "self",
-      "method": "POST"
-    },
-    {
-      "href": "http://localhost:5000/api/v1/jobs/search",
-      "rel": "jobs-search",
-      "method": "POST"
-    }
-  ]
-}
-```
-
-### Versão 2 (v2)
-
-A versão 2 possui os mesmos endpoints com melhorias:
-- **Page Size padrão**: 20 (ao invés de 10)
-- **Headers adicionais**: `X-API-Version`, `X-Total-Count`, `X-Total-Pages`
-- **Respostas de erro melhoradas**: Incluem `version` e `timestamp`
-
-## 🏥 Health Checks
-
-A API possui três endpoints de health check:
-
-### 1. Health Check Completo
-```
-GET /health
-```
-
-Verifica todos os componentes incluindo banco de dados.
-
-**Resposta (200 OK):**
-```json
-{
-  "status": "Healthy",
-  "totalDuration": "00:00:00.1234567",
-  "entries": {
-    "oracle-database": {
-      "status": "Healthy",
-      "duration": "00:00:00.1234567",
-      "tags": ["db", "oracle", "database"]
-    }
+    "fileSizeBytes": 45000
   }
 }
 ```
 
-### 2. Readiness Check
+---
+
+#### 3. Inferir Ocupação (Texto)
+```http
+POST /resumes/infer-primary-occupation
+Content-Type: application/json
+
+{
+  "resumeText": "Trabalho como desenvolvedor full-stack há 5 anos..."
+}
 ```
-GET /health/ready
+
+**Resposta:** `200 OK`
+```json
+{
+  "status": "success",
+  "primaryOccupation": {
+    "titulo": "Desenvolvedor Full Stack",
+    "codigo": "317115",
+    "score": 0.88,
+    "confidence": "high"
+  },
+  "processingTime": 0.567
+}
 ```
 
-Verifica se a aplicação está pronta para receber tráfego.
+---
 
-### 3. Liveness Check
+#### 4. Comparar Skills (Match com Vaga)
+```http
+POST /resumes/match-profile
+Content-Type: application/json
+
+{
+  "candidateSkills": ["Python", "Django", "PostgreSQL"],
+  "jobRequirements": ["Python", "Django", "AWS", "Docker"]
+}
 ```
-GET /health/live
+
+**Resposta:** `200 OK`
+```json
+{
+  "matchScore": 0.75,
+  "matchPercentage": "75%",
+  "level": "BOM - Candidato bem qualificado",
+  "matchedSkills": ["Python", "Django"],
+  "matchedCount": 2,
+  "missingSkills": ["AWS", "Docker"],
+  "missingCount": 2,
+  "analysis": {
+    "strengths": "Possui 2 das 4 skills requeridas",
+    "gaps": "Faltam 2 skills",
+    "recommendation": "Forte candidato"
+  }
+}
 ```
 
-Verifica se a aplicação está viva.
+---
 
-## 📊 Logging e Observabilidade
+### 🔍 **Vagas** (`/jobs`)
 
-### Logging (Serilog)
+#### 1. Buscar Vagas por Cargo
+```http
+POST /jobs/search
+Content-Type: application/json
 
-Os logs são gravados em:
-- **Console**: Logs formatados para desenvolvimento
-- **Arquivo**: `logs/api-{Date}.log` (rotação diária)
+{
+  "occupation": "Desenvolvedor Python",
+  "location": "São Paulo",
+  "page": 1
+}
+```
 
-**Níveis de Log:**
-- Information: Eventos normais da aplicação
-- Warning: Situações anormais mas recuperáveis
-- Error: Erros que precisam atenção
-- Fatal: Erros críticos que param a aplicação
+**Resposta:** `200 OK`
+```json
+{
+  "jobs": [
+    {
+      "id": "123456",
+      "title": "Desenvolvedor Python Senior",
+      "company": "Tech Company",
+      "location": "São Paulo, SP",
+      "salary": "R$ 8.000 - R$ 12.000",
+      "description": "Procuramos desenvolvedor Python com experiência...",
+      "link": "https://www.adzuna.com.br/job/123456"
+    }
+  ],
+  "totalResults": 45,
+  "page": 1,
+  "pageSize": 10
+}
+```
 
-### Tracing (OpenTelemetry)
+---
 
-A aplicação possui instrumentação para:
-- **ASP.NET Core**: Requisições HTTP
-- **HTTP Client**: Chamadas externas
-- **Console Exporter**: Traces exibidos no console
+### 🏥 **Health** (`/health`)
 
-## 🔗 HATEOAS
+```http
+GET /health
+```
 
-Todos os endpoints retornam links HATEOAS para navegação pela API.
+**Resposta:** `200 OK`
+```json
+{
+  "status": "Healthy",
+  "checks": {
+    "oracle-database": {
+      "status": "Healthy",
+      "description": "Oracle Database connection is healthy"
+    }
+  },
+  "timestamp": "2025-11-20T18:30:00Z"
+}
+```
 
-**Tipos de Links:**
-- `self`: Link para o próprio recurso
-- `update`: Link para atualizar o recurso
-- `delete`: Link para deletar o recurso
-- `all-users`: Link para listar todos os usuários
-- `next`: Próxima página (paginação)
-- `previous`: Página anterior (paginação)
-- `first`: Primeira página (paginação)
-- `last`: Última página (paginação)
+---
 
-## 🔒 Segurança
+## 🔗 Integrando com Python API
 
-✅ **Hash de Senhas com BCrypt**
-- Implementado BCrypt para hash seguro de senhas
-- Work factor configurado em 12 (bom equilíbrio entre segurança e performance)
-- Salt automático único para cada senha
-- Padrão da indústria para armazenamento seguro de senhas
+### Pré-requisito
+A API Python deve estar rodando em `http://localhost:5001`
+
+```bash
+# Terminal 1: Python
+cd ia-gs2-2025/api
+chmod +x *.sh
+./install.sh
+python run.py
+
+# Terminal 2: .NET
+cd dotnet-gs2-2025
+dotnet restore
+dotnet build
+dotnet run
+```
+
+### Fluxo de Integração
+
+```mermaid
+sequenceDiagram
+    participant User as Usuário
+    participant Frontend as Frontend<br/>HTML/CSS/JS
+    participant DotNet as API .NET<br/>ASP.NET Core
+    participant Python as API Python<br/>Flask
+    participant CBO as Dataset CBO
+    
+    User->>Frontend: 1. Seleciona PDF
+    Frontend->>DotNet: 2. POST /resumes/analyze
+    DotNet->>DotNet: 3. Extrai texto PDF
+    DotNet->>Python: 4. POST /analyze-resume
+    Python->>CBO: 5. Busca ocupação
+    Python->>CBO: 6. Busca skills
+    Python-->>DotNet: 7. Retorna resultado
+    DotNet->>DotNet: 8. Formata resposta
+    DotNet-->>Frontend: 9. JSON com ocupação + skills
+    Frontend-->>User: 10. Exibe na tela
+```
+
+### Configuração do .NET para chamar Python
+
+O serviço já está configurado em **ResumeService.cs**:
+
+```csharp
+// HTTP Client com timeout de 180s
+client.BaseAddress = new Uri("http://localhost:5001");
+client.Timeout = TimeSpan.FromSeconds(180);
+
+// Chamar endpoint Python
+var response = await _httpClient.PostAsync(
+    "/api/v1/analyze-resume",
+    content
+);
+```
+
+---
+
+## 🌐 Frontend (HTML + JavaScript + LiveServer)
+
+### Configurar Frontend
+
+1. **Abra VS Code** na pasta do projeto
+2. **Clique com botão direito** em `dotnet-gs2-2025/frontend/index.html`
+3. **Clique** em "Open with Live Server"
+
+---
+
+## 🛠️ Tecnologias Utilizadas
+
+| Tecnologia | Versão | Uso |
+|---|---|---|
+| **.NET** | 8.0 | Framework principal |
+| **ASP.NET Core** | 8.0 | Web API |
+| **Entity Framework Core** | 8.0 | ORM |
+| **Oracle.EntityFrameworkCore** | 8.23 | Driver Oracle |
+| **Serilog** | Latest | Logging |
+| **DotNetEnv** | Latest | Carregamento .env |
+| **OpenTelemetry** | Latest | Tracing |
+| **HealthChecks** | Latest | Health Check |
+| **HttpClient** | Built-in | Chamadas HTTP |
+
+---
+
+## 📊 Estrutura de Projeto
+
+```
+dotnet-gs2-2025/
+├── Controllers/
+│   ├── HealthController.cs
+│   ├── V1/
+│   │   ├── ResumesController.cs      ⭐ Upload + Análise
+│   │   ├── UsersController.cs        👤 Gestão usuários
+│   │   └── JobsController.cs         🔍 Busca vagas
+│   └── V2/
+│       └── UsersController.cs        (versioning)
+├── Services/
+│   ├── ResumeService.cs              ⭐ Orquestrador
+│   ├── HuggingFaceService.cs         🤖 Chamadas Python
+│   ├── PdfTextExtractor.cs           📄 Extração PDF
+│   ├── UserService.cs
+│   ├── AdzunaService.cs              🔍 Integração vagas
+│   └── JobSuggestionService.cs
+├── Models/
+│   ├── User.cs                       👤 Nome, Email, Telefone, Senha
+│   ├── HuggingFaceEntity.cs
+│   ├── ResumeExtraction.cs
+│   └── DTOs/
+├── Repositories/
+│   ├── IUserRepository.cs
+│   └── UserRepository.cs
+├── Data/
+│   ├── ApplicationDbContext.cs
+│   └── Migrations/
+├── Configuration/
+│   └── HuggingFaceOptions.cs
+├── frontend/
+│   ├── index.html                   🌐 Interface
+│   ├── script.js                    📱 Lógica
+│   └── style.css                    🎨 Estilos
+├── Properties/
+│   └── launchSettings.json          ⚙️ Portas (5000)
+├── logs/                             📋 Logs da aplicação
+├── .env                              🔐 Variáveis ambiente
+├── .env.example                      📋 Exemplo .env
+├── appsettings.json                 📋 Configurações
+├── appsettings.Development.json      📋 Config desenvolvimento
+├── Program.cs                        ⚙️ Startup
+└── dotnet-gs2-2025.csproj           📦 Projeto
+```
+
+---
+
+## ⚙️ Configuração (appsettings.json)
+
+```json
+{
+  "ConnectionStrings": {
+    "OracleConnection": ""
+  },
+  "Adzuna": {
+    "AppId": "",
+    "AppKey": ""
+  },
+  "HuggingFace": {
+    "SkillsModel": "gpt2",
+    "LocationsModel": "dslim/bert-base-NER",
+    "Token": "",
+    "MinScore": 0.9,
+    "PythonSkillsApiUrl": "http://localhost:5001/api/v1/skills"
+  },
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft": "Warning",
+        "Microsoft.AspNetCore": "Warning",
+        "System": "Warning"
+      }
+    },
+    "WriteTo": [
+      {
+        "Name": "Console",
+        "Args": {
+          "outputTemplate": "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}"
+        }
+      },
+      {
+        "Name": "File",
+        "Args": {
+          "path": "logs/api-.log",
+          "rollingInterval": "Day",
+          "outputTemplate": "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} {Level:u3}] {Message:lj}{NewLine}{Exception}"
+        }
+      }
+    ]
+  },
+  "AllowedHosts": "*"
+}
+
+```
+
+---
+
+## 🔐 Variáveis de Ambiente (.env)
+
+As credenciais são carregadas do arquivo `.env` na raiz do projeto:
 
 
 
+---
+
+### 1. Acessar Swagger
+
+Abra no navegador: **http://localhost:5000**
+
+Swagger UI mostrará todos os endpoints documentados
 
 
+### 1. Acessar o frontend via LiveServer
+
+Abra no navegador: **http://127.0.0.1:5500/dotnet-gs2-2025/frontend/**
+
+No site é só fazer o upload do curriculo em pdf
+
+---
+
+## 🐛 Troubleshooting
+
+### Erro: "Unable to connect to Oracle Database"
+```
+✅ Solução: 
+   1. Verifique as credenciais no .env
+   2. Teste conexão: ping oracle.fiap.com.br
+   3. Verifique porta 1521 aberta
+```
+
+### Erro: "Unable to connect to Python API"
+```
+✅ Solução: Verifique se Python está rodando em localhost:5001
+   python run.py
+```
+
+### Erro: "CORS error"
+```
+✅ Solução: CORS está habilitado para qualquer origem
+   Se persistir, verifique launchSettings.json
+```
+
+### Erro: "Undefined dotnet"
+```
+✅ Solução: Reinstale .NET 8 SDK
+   https://dotnet.microsoft.com/download/dotnet/8.0
+```
+
+### Porta 5000 já está em uso
+```
+✅ Solução: Altere em launchSettings.json
+   "applicationUrl": "http://localhost:5002"
+```
+
+---
+
+## 📊 Performance
+
+| Operação | Tempo |
+|---|---|
+| Upload + Análise | 2-4s |
+| Extração skills | 1-2s |
+| Busca ocupação | 0.5-1s |
+| Busca vagas Adzuna | 1-2s |
+| Health Check | <100ms |
+
+---
+
+## ✅ Checklist de Deployment
+
+- [ ] .NET 8 SDK instalado
+- [ ] Acesso ao Oracle Database configurado
+- [ ] `.env` criado com credenciais corretas
+- [ ] `dotnet restore` executado com sucesso
+- [ ] `dotnet build` compilado com sucesso (0 errors)
+- [ ] Python API rodando em localhost:5001
+- [ ] Porta 5000 disponível
+- [ ] `dotnet run` iniciado
+- [ ] Frontend acessível via LiveServer
+- [ ] Health check respondendo 200 OK em http://localhost:5000/health
+- [ ] Swagger acessível em http://localhost:5000
+
+---
+
+## 🤝 Suporte
+
+Precisa de ajuda?
+
+1. Verifique os logs em `logs/` folder
+2. Acesse `/health` para status dos serviços
+3. Verifique conectividade com Python API e Oracle Database
+4. Consulte `appsettings.json` e `.env`
+5. Veja os logs de erro no console
+
+---

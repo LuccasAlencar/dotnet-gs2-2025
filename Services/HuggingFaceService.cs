@@ -87,36 +87,120 @@ public class HuggingFaceService : IHuggingFaceService
             return new ResumeExtraction();
         }
 
-        var regexSkills = ExtractSkillsWithRegex(text);
-
-        var locationTask = ExtractLocationsAsync(text, cancellationToken);
-        var generativeTask = ExtractSkillsWithGenerativeModelAsync(text, cancellationToken);
-
-        await Task.WhenAll(locationTask, generativeTask);
-
-        var combinedSkills = regexSkills
-            .Concat(generativeTask.Result)
-            .Select(NormalizeSkill)
-            .Where(IsRelevantSkill)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderByDescending(skill => skill.Count(char.IsLetter))
-            .ThenBy(skill => skill)
-            .ToArray();
-
-        var locations = locationTask.Result
-            .Select(NormalizeLocation)
-            .Where(location => !string.IsNullOrWhiteSpace(location))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderByDescending(location => location.Length)
-            .ToArray();
-
-        _logger.LogInformation("Pipeline híbrido processou {SkillCount} habilidades e {LocationCount} localizações", combinedSkills.Length, locations.Length);
-
-        return new ResumeExtraction
+        _logger.LogInformation("Chamando Python API para extrair skills do currículo");
+        
+        try
         {
-            Skills = combinedSkills,
-            Locations = locations
+            // Verificar saúde da API Python
+            var isHealthy = await IsApiHealthyAsync(cancellationToken);
+            
+            if (!isHealthy)
+            {
+                _logger.LogWarning("Python API não está disponível, retornando vazio");
+                return new ResumeExtraction
+                {
+                    Skills = Array.Empty<string>(),
+                    Locations = Array.Empty<string>()
+                };
+            }
+
+            // Chamar endpoint /api/v1/extract da Python API
+            var extractionResult = await CallPythonExtractApiAsync(text, cancellationToken);
+
+            if (extractionResult != null)
+            {
+                _logger.LogInformation("Python API retornou {SkillCount} skills mapeadas", extractionResult.Skills?.Count() ?? 0);
+                return extractionResult;
+            }
+
+            _logger.LogWarning("Python API retornou resultado nulo");
+            return new ResumeExtraction();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao extrair skills via Python API");
+            return new ResumeExtraction
+            {
+                Skills = Array.Empty<string>(),
+                Locations = Array.Empty<string>()
+            };
+        }
+    }
+
+    private async Task<ResumeExtraction> CallPythonExtractApiAsync(string resumeText, CancellationToken cancellationToken)
+    {
+        // URL para o novo endpoint /extract
+        var pythonApiUrl = "http://localhost:5001/api/v1/extract";
+        
+        var request = new
+        {
+            resume_text = resumeText,
+            threshold = 0.75f,
+            top_k = 1
         };
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(120)); // 120 segundos para extrair tudo
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(pythonApiUrl, request, cts.Token);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Python API retornou status {StatusCode}", response.StatusCode);
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cts.Token);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("skills", out var skillsElement) && skillsElement.ValueKind == JsonValueKind.Array)
+            {
+                var skills = new List<string>();
+                
+                foreach (var skillItem in skillsElement.EnumerateArray())
+                {
+                    if (skillItem.TryGetProperty("matched_skill", out var matchedSkill) && 
+                        matchedSkill.ValueKind == JsonValueKind.String)
+                    {
+                        var skillName = matchedSkill.GetString();
+                        if (!string.IsNullOrWhiteSpace(skillName))
+                        {
+                            skills.Add(skillName);
+                        }
+                    }
+                    else if (skillItem.TryGetProperty("original", out var original) && 
+                             original.ValueKind == JsonValueKind.String)
+                    {
+                        var skillName = original.GetString();
+                        if (!string.IsNullOrWhiteSpace(skillName))
+                        {
+                            skills.Add(skillName);
+                        }
+                    }
+                }
+
+                return new ResumeExtraction
+                {
+                    Skills = skills.ToArray(),
+                    Locations = Array.Empty<string>() // Python retornará skills, não localizações
+                };
+            }
+
+            return null;
+        }
+        catch (TaskCanceledException)
+        {
+            _logger.LogError("Timeout ao chamar Python API (120s)");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao parsear resposta da Python API");
+            return null;
+        }
     }
 
     private IReadOnlyCollection<string> ExtractSkillsWithRegex(string text)
@@ -539,6 +623,121 @@ public class HuggingFaceService : IHuggingFaceService
         return entity.Group.Equals("LOC", StringComparison.OrdinalIgnoreCase)
             || entity.Group.Equals("GPE", StringComparison.OrdinalIgnoreCase)
             || entity.Group.Equals("LOCATION", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Valida se API Python está rodando
+    /// </summary>
+    private async Task<bool> IsApiHealthyAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(5));
+
+            var baseUrl = _options.PythonSkillsApiUrl.Replace("/skills", "").Replace("/api/v1", "");
+            var response = await _httpClient.GetAsync($"{baseUrl}/api/v1/health/", cts.Token);
+
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Enriquece skills com IA da Python API
+    /// Usa Sentence Transformers + BERT para similaridade semântica
+    /// </summary>
+    private async Task<List<string>> EnrichSkillsWithPythonApiAsync(
+        List<string> skills,
+        CancellationToken cancellationToken = default)
+    {
+        if (skills == null || skills.Count == 0)
+            return new List<string>();
+
+        try
+        {
+            // Validar health da API Python
+            if (!await IsApiHealthyAsync(cancellationToken))
+            {
+                _logger.LogWarning("API Python não está disponível para enriquecimento de skills");
+                return new List<string>();
+            }
+
+            // Payload para Python API
+            var payload = new
+            {
+                unrecognized_skills = skills,
+                top_k = 3,
+                threshold = 0.60
+            };
+
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromSeconds(120));            _logger.LogInformation(
+                "Chamando Python API para enriquecer {Count} skills",
+                skills.Count);
+
+            // POST para Python API
+            using var response = await _httpClient.PostAsJsonAsync(
+                $"{_options.PythonSkillsApiUrl}/match",
+                payload,
+                cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Python API retornou status {StatusCode}",
+                    response.StatusCode);
+                return new List<string>();
+            }
+
+            // Parsear resposta
+            await using var stream = await response.Content.ReadAsStreamAsync(cts.Token);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cts.Token);
+
+            var results = new List<string>();
+
+            // Extrair matched skills da resposta
+            if (document.RootElement.TryGetProperty("results", out var resultsElement))
+            {
+                foreach (var property in resultsElement.EnumerateObject())
+                {
+                    if (property.Value.TryGetProperty("matches", out var matchesElement))
+                    {
+                        foreach (var match in matchesElement.EnumerateArray())
+                        {
+                            if (match.TryGetProperty("matched_skill", out var skillElement))
+                            {
+                                var skill = skillElement.GetString();
+                                if (!string.IsNullOrWhiteSpace(skill)
+                                    && !results.Contains(skill, StringComparer.OrdinalIgnoreCase))
+                                {
+                                    results.Add(skill);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            _logger.LogInformation(
+                "Python API retornou {Count} habilidades enriquecidas",
+                results.Count);
+
+            return results;
+        }
+        catch (TaskCanceledException)
+        {
+            _logger.LogWarning("Timeout ao chamar Python API para enriquecimento de skills");
+            return new List<string>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao chamar Python API para enriquecimento de skills");
+            return new List<string>();
+        }
     }
     
     public async Task<string> GenerateText(string prompt, CancellationToken cancellationToken = default)

@@ -11,5 +11,7 @@ public class HuggingFaceOptions
     public string? Token { get; set; }
 
     public double MinScore { get; set; } = 0.9;
+
+    public string PythonSkillsApiUrl { get; set; } = "http://localhost:5001/api/v1/skills";
 }
 
