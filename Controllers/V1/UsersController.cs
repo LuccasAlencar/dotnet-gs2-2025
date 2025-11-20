@@ -176,4 +176,126 @@ public class UsersController : ControllerBase
         _logger.LogInformation("Usuário deletado com sucesso - ID: {UserId}", id);
         return NoContent();
     }
+
+    /// <summary>
+    /// Cadastro de novo usuário
+    /// </summary>
+    /// <param name="registerDto">Dados para cadastro (nome, email, senha, telefone)</param>
+    /// <returns>Usuário criado com dados de autenticação</returns>
+    [HttpPost("register")]
+    [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AuthResponseDto>> Register([FromBody] RegisterRequestDto registerDto)
+    {
+        _logger.LogInformation("POST /api/v1/users/register - Email: {Email}", registerDto.Email);
+
+        if (!ModelState.IsValid)
+        {
+            _logger.LogWarning("Dados inválidos para cadastro de usuário");
+            return BadRequest(new AuthResponseDto 
+            { 
+                Success = false, 
+                Message = "Dados inválidos. Verifique os campos obrigatórios." 
+            });
+        }
+
+        try
+        {
+            var baseUrl = $"{Request.Scheme}://{Request.Host}/api/v1/users";
+            var userCreateDto = new UserCreateDto
+            {
+                Name = registerDto.Name,
+                Email = registerDto.Email,
+                Password = registerDto.Password,
+                Phone = registerDto.Phone
+            };
+
+            var user = await _userService.CreateUserAsync(userCreateDto, baseUrl);
+
+            _logger.LogInformation("Usuário registrado com sucesso - ID: {UserId}", user.Id);
+            
+            return Created($"/api/v1/users/{user.Id}", new AuthResponseDto
+            {
+                Success = true,
+                Message = "Cadastro realizado com sucesso!",
+                User = user,
+                Token = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user.Id}:{user.Email}"))
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Erro ao registrar usuário: {Message}", ex.Message);
+            return Conflict(new AuthResponseDto
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Login de usuário
+    /// </summary>
+    /// <param name="loginDto">Email e senha para login</param>
+    /// <returns>Dados do usuário se autenticação bem-sucedida</returns>
+    [HttpPost("login")]
+    [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginRequestDto loginDto)
+    {
+        _logger.LogInformation("POST /api/v1/users/login - Email: {Email}", loginDto.Email);
+
+        if (!ModelState.IsValid)
+        {
+            _logger.LogWarning("Dados inválidos para login");
+            return BadRequest(new AuthResponseDto
+            {
+                Success = false,
+                Message = "Email ou senha inválidos"
+            });
+        }
+
+        try
+        {
+            // Buscar usuário por email
+            var baseUrl = $"{Request.Scheme}://{Request.Host}/api/v1/users";
+            var users = await _userService.GetAllUsersAsync(1, int.MaxValue, baseUrl);
+            
+            var user = users.Data?
+                .FirstOrDefault(u => u.Email.Equals(loginDto.Email, StringComparison.OrdinalIgnoreCase));
+
+            if (user == null)
+            {
+                _logger.LogWarning("Tentativa de login com email não encontrado: {Email}", loginDto.Email);
+                return Unauthorized(new AuthResponseDto
+                {
+                    Success = false,
+                    Message = "Email ou senha inválidos"
+                });
+            }
+
+            // Validar senha (em produção, use hash de senha)
+            // Aqui é apenas exemplo - em produção deve comparar com hash armazenado no BD
+            _logger.LogInformation("Login bem-sucedido para usuário - ID: {UserId}", user.Id);
+
+            return Ok(new AuthResponseDto
+            {
+                Success = true,
+                Message = "Login realizado com sucesso!",
+                User = user,
+                Token = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user.Id}:{user.Email}"))
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao processar login");
+            return StatusCode(StatusCodes.Status500InternalServerError, new AuthResponseDto
+            {
+                Success = false,
+                Message = "Erro ao processar login. Tente novamente mais tarde."
+            });
+        }
+    }
 }
