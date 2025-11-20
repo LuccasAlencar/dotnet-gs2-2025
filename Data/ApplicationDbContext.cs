@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using dotnet_gs2_2025.Models;
-using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
 namespace dotnet_gs2_2025.Data;
 
@@ -20,9 +19,8 @@ public class ApplicationDbContext : DbContext
         // Configuração compatível com MySQL e Oracle
         modelBuilder.Entity<User>(entity =>
         {
-            // Nome da tabela em minúsculas para MySQL, maiúsculas para Oracle
-            var tableName = Database.IsMySql() ? "users" : "USERS";
-            entity.ToTable(tableName);
+            // Nome da tabela em maiúsculas para Oracle
+            entity.ToTable("USERS");
             
             entity.HasIndex(e => e.Email)
                 .IsUnique();

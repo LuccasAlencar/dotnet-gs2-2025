@@ -1,6 +1,6 @@
 # Users API Buscadora de Vagas - .NET 8
 
-API RESTful para busca de vagas de emprego usando Adzuna API, com gerenciamento de usuários e análise de currículo. Desenvolvida em .NET 8 com Oracle Database, seguindo as melhores práticas de desenvolvimento e arquitetura de software.
+API RESTful para busca de vagas de emprego usando Adzuna API, com gerenciamento de usuários e análise de currículo. Desenvolvida em .NET 8 com Oracle Database, seguindo as melhores práticas de desenvolvimento e arquitetura de software e padrões RESTful.
 
 ## 📋 Índice
 
@@ -71,33 +71,176 @@ API RESTful para busca de vagas de emprego usando Adzuna API, com gerenciamento 
 
 ## 🏗️ Arquitetura
 
+### Estrutura do Projeto
+
 ```
 dotnet-gs2-2025/
-├── Controllers/
-│   ├── V1/
+├── Controllers/                   # Controladores da API
+│   ├── V1/                       # API Versão 1
 │   │   ├── JobsController.cs     # Busca de vagas
 │   │   ├── ResumesController.cs  # Processamento de currículo
-│   │   └── UsersController.cs    # API versão 1
-│   ├── V2/
-│   │   └── UsersController.cs    # API versão 2
-│   └── HealthController.cs        # Health check
-├── Configuration/
+│   │   └── UsersController.cs    # Gerenciamento de usuários
+│   ├── V2/                       # API Versão 2
+│   │   └── UsersController.cs    # Versão aprimorada de usuários
+│   └── HealthController.cs       # Health checks e monitoramento
+│
+├── Configuration/                 # Configurações da aplicação
 │   └── HuggingFaceOptions.cs     # Configurações do modelo IA
-├── Data/
-│   └── ApplicationDbContext.cs    # Contexto do EF Core
-├── Models/
-│   ├── HuggingFaceEntity.cs       # Entidades retornadas pela IA
-│   ├── User.cs                    # Entidade User
-│   └── DTOs/
-│       ├── JobDto.cs              # DTO de vagas
-│       ├── UserCreateDto.cs       # DTO para criação
-│       ├── UserUpdateDto.cs       # DTO para atualização
-│       ├── UserResponseDto.cs     # DTO para resposta
-│       ├── PagedResponse.cs       # DTO para paginação
-│       ├── ResumeUploadRequestDto.cs # DTO upload de currículo
-│       ├── SkillExtractionResponseDto.cs # DTO resposta Hugging Face
-│       ├── SkillExtractionResult.cs # Resultado interno de extração
-│       └── Link.cs                # DTO para HATEOAS
+│
+├── Data/                         # Camada de dados
+│   ├── ApplicationDbContext.cs   # Contexto do EF Core
+│   └── Migrations/               # Migrações do banco de dados
+│
+├── Models/                       # Modelos de domínio
+│   ├── HuggingFaceEntity.cs      # Entidades da API de IA
+│   ├── User.cs                   # Entidade de usuário
+│   └── DTOs/                     # Objetos de Transferência de Dados
+│       ├── Requests/             # DTOs de requisição
+│       │   ├── UserCreateDto.cs
+│       │   ├── UserUpdateDto.cs
+│       │   └── ResumeUploadRequestDto.cs
+│       ├── Responses/            # DTOs de resposta
+│       │   ├── JobDto.cs
+│       │   ├── UserResponseDto.cs
+│       │   ├── PagedResponse.cs
+│       │   └── SkillExtractionResponseDto.cs
+│       └── Shared/               # DTOs compartilhados
+│           ├── Link.cs           # Para HATEOAS
+│           └── ErrorResponse.cs  # Padrão de erros
+│
+├── Repositories/                 # Camada de acesso a dados
+│   ├── IUserRepository.cs        # Interface do repositório
+│   └── UserRepository.cs         # Implementação concreta
+│
+├── Services/                     # Lógica de negócios
+│   ├── Interfaces/               # Contratos de serviço
+│   │   ├── IUserService.cs
+│   │   ├── IJobService.cs
+│   │   └── IResumeService.cs
+│   ├── External/                 # Integrações externas
+│   │   ├── AdzunaService.cs
+│   │   └── HuggingFaceService.cs
+│   └── Implementations/          # Implementações dos serviços
+│       └── UserService.cs
+│
+└── frontend/                     # Interface do usuário
+    ├── index.html
+    ├── css/
+    └── js/
+```
+
+### Diagrama de Arquitetura
+
+```mermaid
+graph TD
+    subgraph Client
+        UI[Interface Web]
+        Mobile[Aplicativo Móvel]
+    end
+
+    subgraph API[API .NET Core]
+        Controllers[Controladores]
+        Services[Serviços]
+        Repositories[Repositórios]
+        
+        Controllers -->|Usa| Services
+        Services -->|Usa| Repositories
+    end
+
+    subgraph ExternalServices[Serviços Externos]
+        Adzuna[Adzuna API]
+        HuggingFace[Hugging Face API]
+    end
+
+    subgraph Database
+        Oracle[(Oracle Database)]
+    end
+
+    UI -->|HTTP/HTTPS| API
+    Mobile -->|HTTP/HTTPS| API
+    
+    API -->|Consulta| Adzuna
+    API -->|Processa| HuggingFace
+    
+    Repositories -->|Lê/Escreve| Oracle
+
+    classDef external fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef database fill:#9cf,stroke:#333,stroke-width:2px;
+    classDef api fill:#9f9,stroke:#333,stroke-width:2px;
+    
+    class Adzuna,HuggingFace external;
+    class Oracle database;
+    class API api;
+```
+
+### Padrões de Design
+
+- **Clean Architecture**: Separação clara de responsabilidades
+- **Repository Pattern**: Abstração do acesso a dados
+- **Dependency Injection**: Injeção de dependências para baixo acoplamento
+- **DTO Pattern**: Transferência de dados entre camadas
+- **HATEOAS**: Hypermedia como mecanismo de navegação
+
+### Boas Práticas de API REST
+
+1. **Verbos HTTP**
+   - `GET`: Recuperar recursos
+   - `POST`: Criar novos recursos
+   - `PUT`: Atualizar recursos existentes (substituição completa)
+   - `PATCH`: Atualização parcial de recursos
+   - `DELETE`: Remover recursos
+
+2. **Códigos de Status HTTP**
+   - `200 OK`: Requisição bem-sucedida
+   - `201 Created`: Recurso criado com sucesso
+   - `204 No Content`: Sucesso sem conteúdo de retorno
+   - `400 Bad Request`: Requisição inválida
+   - `401 Unauthorized`: Não autenticado
+   - `403 Forbidden`: Autenticado mas não autorizado
+   - `404 Not Found`: Recurso não encontrado
+   - `409 Conflict`: Conflito (ex: email já cadastrado)
+   - `429 Too Many Requests`: Muitas requisições
+   - `500 Internal Server Error`: Erro inesperado
+
+3. **Versionamento**
+   - Suporte a múltiplas versões da API
+   - Versionamento por URL (`/api/v1/...`)
+   - Versionamento por header (`X-API-Version: 1.0`)
+   - Versionamento por query string (`?api-version=1.0`)
+
+4. **Respostas Padronizadas**
+   ```json
+   // Sucesso (200 OK)
+   {
+     "data": { ... },
+     "links": [
+       { "rel": "self", "href": "/api/v1/users/1", "method": "GET" },
+       { "rel": "update", "href": "/api/v1/users/1", "method": "PUT" }
+     ]
+   }
+
+   // Erro (400 Bad Request)
+   {
+     "type": "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+     "title": "Bad Request",
+     "status": 400,
+     "traceId": "00-0e5c8a5f2f3e1b2a4c6d7e8f9a0b1c2d-1a2b3c4d5e6f7a8b-00",
+     "errors": {
+       "email": ["O campo Email é obrigatório"],
+       "password": ["A senha deve ter no mínimo 8 caracteres"]
+     }
+   }
+   ```
+
+5. **Paginação**
+   - Parâmetros: `page`, `pageSize`
+   - Exemplo: `/api/v1/users?page=1&pageSize=10`
+   - Resposta inclui metadados de paginação
+
+6. **Filtros e Ordenação**
+   - Filtros via query string
+   - Ordenação via parâmetro `sort`
+   - Exemplo: `/api/v1/jobs?location=sp&minSalary=5000&sort=-createdAt`
 │   └── ResumeExtraction.cs        # Entidades consolidadas do currículo
 ├── Repositories/
 │   ├── IUserRepository.cs         # Interface do repositório
@@ -185,7 +328,6 @@ dotnet run
 
 A aplicação estará disponível em:
 - **HTTP**: http://localhost:5000
-- **HTTPS**: https://localhost:5001
 - **Swagger UI**: http://localhost:5000 (raiz)
 
 ### 5. Abra o Frontend
@@ -598,9 +740,7 @@ Invoke-RestMethod -Uri "http://localhost:5000/api/v1/users" -Method Post -Body $
 - Salt automático único para cada senha
 - Padrão da indústria para armazenamento seguro de senhas
 
-## 📄 Licença
 
-Este projeto é de código aberto para fins educacionais.
 
 
 

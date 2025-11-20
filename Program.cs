@@ -6,12 +6,13 @@ using dotnet_gs2_2025.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Serilog;
+using System.Data;
+using Dapper;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using DotNetEnv;
-using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using Oracle.EntityFrameworkCore;
 
 // Carregar variáveis de ambiente do arquivo .env
@@ -34,49 +35,23 @@ try
     // Configurar Serilog
     builder.Host.UseSerilog();
 
-    // Detectar qual banco de dados usar
-    // Prioridade: FORCE_MYSQL (para migrations) > MYSQL_HOST (Azure) > ORACLE_DATA_SOURCE (Local) > appsettings.json
-    var forceMySQL = Environment.GetEnvironmentVariable("FORCE_MYSQL");
-    var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST");
+    // Configuração do Oracle
     var oracleDataSource = Environment.GetEnvironmentVariable("ORACLE_DATA_SOURCE");
     var oracleUserId = Environment.GetEnvironmentVariable("ORACLE_USER_ID");
     var oraclePassword = Environment.GetEnvironmentVariable("ORACLE_PASSWORD");
     
-    string connectionString = "";
+    if (string.IsNullOrEmpty(oracleDataSource) || string.IsNullOrEmpty(oracleUserId) || string.IsNullOrEmpty(oraclePassword))
+    {
+        throw new InvalidOperationException("Variáveis de ambiente do Oracle não configuradas corretamente");
+    }
     
-    if (!string.IsNullOrEmpty(forceMySQL) || !string.IsNullOrEmpty(mysqlHost))
-    {
-        // Usar MySQL (Azure)
-        Log.Information("Usando Azure Database for MySQL");
-        var mysqlPort = Environment.GetEnvironmentVariable("MYSQL_PORT") ?? "3306";
-        var mysqlDatabase = Environment.GetEnvironmentVariable("MYSQL_DATABASE");
-        var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER");
-        var mysqlPassword = Environment.GetEnvironmentVariable("MYSQL_PASSWORD");
+    var connectionString = $"User Id={oracleUserId};Password={oraclePassword};Data Source={oracleDataSource};";
+    
+    // Configurar o DbContext para usar Oracle
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseOracle(connectionString));
         
-        connectionString = $"Server={mysqlHost};Port={mysqlPort};Database={mysqlDatabase};Uid={mysqlUser};Pwd={mysqlPassword};SslMode=Required;";
-        
-        builder.Services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
-    }
-    else if (!string.IsNullOrEmpty(oracleDataSource) && !string.IsNullOrEmpty(oracleUserId))
-    {
-        // Usar Oracle (Local)
-        Log.Information("Usando Oracle Database (Local)");
-        connectionString = $"User Id={oracleUserId};Password={oraclePassword};Data Source={oracleDataSource};";
-        
-        builder.Services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseOracle(connectionString));
-    }
-    else
-    {
-        // Fallback para appsettings.json
-        Log.Information("Usando configuração padrão do appsettings.json");
-        connectionString = builder.Configuration.GetConnectionString("MySqlConnection") 
-            ?? builder.Configuration.GetConnectionString("OracleConnection") ?? "";
-        
-        builder.Services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
-    }
+    Log.Information("Banco de dados Oracle configurado com sucesso");
 
     // Dependency Injection
     builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -191,9 +166,50 @@ try
         using (var scope = app.Services.CreateScope())
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            Log.Information("Aplicando migrations do banco de dados...");
-            dbContext.Database.Migrate();
-            Log.Information("✅ Migrations aplicadas com sucesso");
+            
+            // Verificar se a tabela __EFMigrationsHistory existe (indica que já houve migrações)
+            var migrationTableExists = dbContext.Database.GetDbConnection()
+                .QueryFirstOrDefault<int?>("SELECT 1 FROM ALL_TABLES WHERE TABLE_NAME = '__EFMigrationsHistory' AND OWNER = USER") != null;
+
+            if (!migrationTableExists)
+            {
+                // Se a tabela de migrações não existe, criamos ela manualmente
+                Log.Information("Criando tabela de histórico de migrações...");
+                dbContext.Database.ExecuteSqlRaw(@"
+                    CREATE TABLE ""__EFMigrationsHistory"" (
+                        ""MigrationId"" NVARCHAR2(150) NOT NULL,
+                        ""ProductVersion"" NVARCHAR2(32) NOT NULL,
+                        CONSTRAINT ""PK___EFMigrationsHistory"" PRIMARY KEY (""MigrationId"")
+                    )");
+                
+                // Marca a migração inicial como aplicada
+                var initialMigration = dbContext.Database.GetMigrations().First();
+                dbContext.Database.ExecuteSqlRaw($@"
+                    INSERT INTO ""__EFMigrationsHistory"" (""MigrationId"", ""ProductVersion"")
+                    VALUES ('{initialMigration}', '8.0.10')");
+                
+                Log.Information("✅ Tabela de histórico de migrações criada com sucesso");
+            }
+            
+            // Verifica se há migrações pendentes
+            var pendingMigrations = dbContext.Database.GetPendingMigrations().ToList();
+            if (pendingMigrations.Any())
+            {
+                Log.Information($"Aplicando {pendingMigrations.Count} migração(ões) pendente(s)...");
+                try 
+                {
+                    dbContext.Database.Migrate();
+                    Log.Information("✅ Migrações aplicadas com sucesso");
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "⚠️  Não foi possível aplicar todas as migrações. Verifique se o banco de dados já está atualizado.");
+                }
+            }
+            else
+            {
+                Log.Information("✅ Nenhuma migração pendente para ser aplicada");
+            }
         }
     }
     catch (Exception ex)
